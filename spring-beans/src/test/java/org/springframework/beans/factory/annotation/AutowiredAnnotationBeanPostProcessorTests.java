@@ -41,6 +41,7 @@ import org.mockito.Mockito;
 
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
@@ -55,6 +56,7 @@ import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.core.Ordered;
+import org.springframework.core.ResolvableType;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.core.annotation.Order;
 import org.springframework.tests.sample.beans.ITestBean;
@@ -917,7 +919,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		RootBeanDefinition tbm = new RootBeanDefinition(CollectionFactoryMethods.class);
 		tbm.setUniqueFactoryMethodName("testBeanMap");
 		bf.registerBeanDefinition("myTestBeanMap", tbm);
-		bf.registerSingleton("otherMap", new HashMap<Object, Object>());
+		bf.registerSingleton("otherMap", new HashMap<>());
 
 		MapConstructorInjectionBean bean = (MapConstructorInjectionBean) bf.getBean("annotatedBean");
 		assertSame(bf.getBean("myTestBeanMap"), bean.getTestBeanMap());
@@ -939,7 +941,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		tbs.add(new TestBean("tb1"));
 		tbs.add(new TestBean("tb2"));
 		bf.registerSingleton("testBeans", tbs);
-		bf.registerSingleton("otherSet", new HashSet<Object>());
+		bf.registerSingleton("otherSet", new HashSet<>());
 
 		SetConstructorInjectionBean bean = (SetConstructorInjectionBean) bf.getBean("annotatedBean");
 		assertSame(tbs, bean.getTestBeanSet());
@@ -960,7 +962,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		RootBeanDefinition tbs = new RootBeanDefinition(CollectionFactoryMethods.class);
 		tbs.setUniqueFactoryMethodName("testBeanSet");
 		bf.registerBeanDefinition("myTestBeanSet", tbs);
-		bf.registerSingleton("otherSet", new HashSet<Object>());
+		bf.registerSingleton("otherSet", new HashSet<>());
 
 		SetConstructorInjectionBean bean = (SetConstructorInjectionBean) bf.getBean("annotatedBean");
 		assertSame(bf.getBean("myTestBeanSet"), bean.getTestBeanSet());
@@ -1144,12 +1146,15 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		RootBeanDefinition tb1 = new RootBeanDefinition(TestBean.class);
 		tb1.setPrimary(true);
 		bf.registerBeanDefinition("testBean1", tb1);
-		bf.registerBeanDefinition("testBean2", new RootBeanDefinition(TestBean.class));
+		RootBeanDefinition tb2 = new RootBeanDefinition(TestBean.class);
+		tb2.setLazyInit(true);
+		bf.registerBeanDefinition("testBean2", tb2);
 
 		SmartObjectFactoryInjectionBean bean = (SmartObjectFactoryInjectionBean) bf.getBean("annotatedBean");
 		assertSame(bf.getBean("testBean1"), bean.getTestBean());
 		assertSame(bf.getBean("testBean1"), bean.getOptionalTestBean());
 		assertSame(bf.getBean("testBean1"), bean.getUniqueTestBean());
+		assertFalse(bf.containsSingleton("testBean2"));
 		bf.destroySingletons();
 	}
 
@@ -1633,6 +1638,8 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		assertSame(1, bean.stringRepositoryMap.size());
 		assertSame(repo, bean.repositoryMap.get("repo"));
 		assertSame(repo, bean.stringRepositoryMap.get("repo"));
+
+		assertArrayEquals(new String[] {"repo"}, bf.getBeanNamesForType(ResolvableType.forClassWithGenerics(Repository.class, String.class)));
 	}
 
 	@Test
@@ -2018,6 +2025,9 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		GenericInterface1Impl bean1 = (GenericInterface1Impl) bf.getBean("bean1");
 		GenericInterface2Impl bean2 = (GenericInterface2Impl) bf.getBean("bean2");
 		assertSame(bean2, bean1.gi2);
+
+		assertArrayEquals(new String[] {"bean1"}, bf.getBeanNamesForType(ResolvableType.forClassWithGenerics(GenericInterface1.class, String.class)));
+		assertArrayEquals(new String[] {"bean2"}, bf.getBeanNamesForType(ResolvableType.forClassWithGenerics(GenericInterface2.class, String.class)));
 	}
 
 	@Test
@@ -2039,6 +2049,24 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		GenericInterface1Impl bean1 = (GenericInterface1Impl) bf.getBean("bean1");
 		GenericInterface2Impl bean2 = (GenericInterface2Impl) bf.getBean("bean2");
 		assertSame(bean2, bean1.gi2);
+	}
+
+	@Test
+	public void testGenericsBasedInjectionWithBeanDefinitionTargetResolvableType() throws Exception {
+		DefaultListableBeanFactory bf = new DefaultListableBeanFactory();
+		bf.setAutowireCandidateResolver(new QualifierAnnotationAutowireCandidateResolver());
+		AutowiredAnnotationBeanPostProcessor bpp = new AutowiredAnnotationBeanPostProcessor();
+		bpp.setBeanFactory(bf);
+		bf.addBeanPostProcessor(bpp);
+		RootBeanDefinition bd1 = new RootBeanDefinition(GenericInterface2Bean.class);
+		bd1.setTargetType(ResolvableType.forClassWithGenerics(GenericInterface2Bean.class, String.class));
+		bf.registerBeanDefinition("bean1", bd1);
+		RootBeanDefinition bd2 = new RootBeanDefinition(GenericInterface2Bean.class);
+		bd2.setTargetType(ResolvableType.forClassWithGenerics(GenericInterface2Bean.class, Integer.class));
+		bf.registerBeanDefinition("bean2", bd2);
+		bf.registerBeanDefinition("bean3", new RootBeanDefinition(MultiGenericFieldInjection.class));
+
+		assertEquals("bean1 a bean2 123", bf.getBean("bean3").toString());
 	}
 
 	@Test
@@ -3076,7 +3104,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 
 	public interface GenericInterface1<T> {
 
-		public String doSomethingGeneric(T o);
+		String doSomethingGeneric(T o);
 	}
 
 
@@ -3095,7 +3123,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		}
 
 		public static GenericInterface1<String> createErased() {
-			return new GenericInterface1Impl<String>();
+			return new GenericInterface1Impl<>();
 		}
 
 		@SuppressWarnings("rawtypes")
@@ -3129,6 +3157,37 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		@Override
 		public String doSomethingMoreGeneric(Object o) {
 			return "somethingMoreGeneric_" + o;
+		}
+	}
+
+
+	public static class GenericInterface2Bean<K> implements GenericInterface2<K>, BeanNameAware {
+
+		private String name;
+
+		@Override
+		public void setBeanName(String name) {
+			this.name = name;
+		}
+
+		@Override
+		public String doSomethingMoreGeneric(K o) {
+			return this.name + " " + o;
+		}
+	}
+
+
+	public static class MultiGenericFieldInjection {
+
+		@Autowired
+		private GenericInterface2<String> stringBean;
+
+		@Autowired
+		private GenericInterface2<Integer> integerBean;
+
+		@Override
+		public String toString() {
+			return this.stringBean.doSomethingMoreGeneric("a") + " " + this.integerBean.doSomethingMoreGeneric(123);
 		}
 	}
 
@@ -3251,14 +3310,14 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 	public static class CollectionFactoryMethods {
 
 		public static Map<String, TestBean> testBeanMap() {
-			Map<String, TestBean> tbm = new LinkedHashMap<String, TestBean>();
+			Map<String, TestBean> tbm = new LinkedHashMap<>();
 			tbm.put("testBean1", new TestBean("tb1"));
 			tbm.put("testBean2", new TestBean("tb2"));
 			return tbm;
 		}
 
 		public static Set<TestBean> testBeanSet() {
-			Set<TestBean> tbs = new LinkedHashSet<TestBean>();
+			Set<TestBean> tbs = new LinkedHashSet<>();
 			tbs.add(new TestBean("tb1"));
 			tbs.add(new TestBean("tb2"));
 			return tbs;

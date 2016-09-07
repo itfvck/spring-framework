@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.springframework.util;
 
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -27,7 +27,7 @@ import org.junit.Test;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.support.DefaultConversionService;
 
-import static java.util.Collections.singletonMap;
+import static java.util.Collections.*;
 import static org.junit.Assert.*;
 
 /**
@@ -75,7 +75,7 @@ public class MimeTypeTests {
 		MimeType mimeType = MimeType.valueOf(s);
 		assertEquals("Invalid type", "text", mimeType.getType());
 		assertEquals("Invalid subtype", "html", mimeType.getSubtype());
-		assertEquals("Invalid charset", Charset.forName("ISO-8859-1"), mimeType.getCharSet());
+		assertEquals("Invalid charset", StandardCharsets.ISO_8859_1, mimeType.getCharset());
 	}
 
 	@Test
@@ -84,7 +84,7 @@ public class MimeTypeTests {
 		MimeType mimeType = MimeType.valueOf(s);
 		assertEquals("Invalid type", "application", mimeType.getType());
 		assertEquals("Invalid subtype", "xml", mimeType.getSubtype());
-		assertEquals("Invalid charset", Charset.forName("UTF-8"), mimeType.getCharSet());
+		assertEquals("Invalid charset", StandardCharsets.UTF_8, mimeType.getCharset());
 	}
 
 	@Test
@@ -190,6 +190,11 @@ public class MimeTypeTests {
 	}
 
 	@Test(expected = InvalidMimeTypeException.class)
+	public void parseMimeTypeMissingTypeAndSubtype() throws Exception {
+		MimeTypeUtils.parseMimeType("     ;a=b");
+	}
+
+	@Test(expected = InvalidMimeTypeException.class)
 	public void parseMimeTypeEmptyParameterAttribute() {
 		MimeTypeUtils.parseMimeType("audio/*;=value");
 	}
@@ -263,13 +268,13 @@ public class MimeTypeTests {
 
 		assertTrue("Invalid comparison result", audioBasicLevel.compareTo(audio) > 0);
 
-		List<MimeType> expected = new ArrayList<MimeType>();
+		List<MimeType> expected = new ArrayList<>();
 		expected.add(audio);
 		expected.add(audioBasic);
 		expected.add(audioBasicLevel);
 		expected.add(audioWave);
 
-		List<MimeType> result = new ArrayList<MimeType>(expected);
+		List<MimeType> result = new ArrayList<>(expected);
 		Random rnd = new Random();
 		// shuffle & sort 10 times
 		for (int i = 0; i < 10; i++) {

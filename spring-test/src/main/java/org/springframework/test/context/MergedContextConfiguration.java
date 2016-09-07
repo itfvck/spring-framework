@@ -127,7 +127,7 @@ public class MergedContextConfiguration implements Serializable {
 		}
 
 		// Active profiles must be unique
-		Set<String> profilesSet = new LinkedHashSet<String>(Arrays.asList(activeProfiles));
+		Set<String> profilesSet = new LinkedHashSet<>(Arrays.asList(activeProfiles));
 		return StringUtils.toStringArray(profilesSet);
 	}
 
@@ -245,7 +245,7 @@ public class MergedContextConfiguration implements Serializable {
 			MergedContextConfiguration parent) {
 		this(testClass, locations, classes, contextInitializerClasses, activeProfiles,
 				propertySourceLocations, propertySourceProperties,
-				Collections.<ContextCustomizer> emptySet(), contextLoader,
+				EMPTY_CONTEXT_CUSTOMIZERS, contextLoader,
 				cacheAwareContextLoaderDelegate, parent);
 	}
 

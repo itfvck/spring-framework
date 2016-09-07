@@ -16,15 +16,11 @@
 
 package org.springframework.web.servlet.mvc.method.annotation;
 
-import static org.junit.Assert.*;
-import static org.mockito.BDDMockito.*;
-
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 
@@ -36,7 +32,6 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpOutputMessage;
-import org.springframework.http.HttpRangeResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -54,6 +49,9 @@ import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.method.support.ModelAndViewContainer;
 import org.springframework.web.servlet.HandlerMapping;
+
+import static org.junit.Assert.*;
+import static org.mockito.BDDMockito.*;
 
 /**
  * Test fixture for {@link RequestResponseBodyMethodProcessor} delegating to a
@@ -137,7 +135,7 @@ public class RequestResponseBodyMethodProcessorMockTests {
 		servletRequest.addHeader("Content-Type", contentType.toString());
 
 		String body = "Foo";
-		servletRequest.setContent(body.getBytes(Charset.forName("UTF-8")));
+		servletRequest.setContent(body.getBytes(StandardCharsets.UTF_8));
 
 		given(stringMessageConverter.canRead(String.class, contentType)).willReturn(true);
 		given(stringMessageConverter.read(eq(String.class), isA(HttpInputMessage.class))).willReturn(body);
@@ -169,7 +167,7 @@ public class RequestResponseBodyMethodProcessorMockTests {
 	private void testResolveArgumentWithValidation(SimpleBean simpleBean) throws Exception {
 		MediaType contentType = MediaType.TEXT_PLAIN;
 		servletRequest.addHeader("Content-Type", contentType.toString());
-		servletRequest.setContent("payload".getBytes(Charset.forName("UTF-8")));
+		servletRequest.setContent("payload".getBytes(StandardCharsets.UTF_8));
 
 		@SuppressWarnings("unchecked")
 		HttpMessageConverter<SimpleBean> beanConverter = mock(HttpMessageConverter.class);
@@ -185,7 +183,7 @@ public class RequestResponseBodyMethodProcessorMockTests {
 	public void resolveArgumentCannotRead() throws Exception {
 		MediaType contentType = MediaType.TEXT_PLAIN;
 		servletRequest.addHeader("Content-Type", contentType.toString());
-		servletRequest.setContent("payload".getBytes(Charset.forName("UTF-8")));
+		servletRequest.setContent("payload".getBytes(StandardCharsets.UTF_8));
 
 		given(stringMessageConverter.canRead(String.class, contentType)).willReturn(false);
 
@@ -194,7 +192,7 @@ public class RequestResponseBodyMethodProcessorMockTests {
 
 	@Test(expected = HttpMediaTypeNotSupportedException.class)
 	public void resolveArgumentNoContentType() throws Exception {
-		servletRequest.setContent("payload".getBytes(Charset.forName("UTF-8")));
+		servletRequest.setContent("payload".getBytes(StandardCharsets.UTF_8));
 		given(stringMessageConverter.canRead(String.class, MediaType.APPLICATION_OCTET_STREAM)).willReturn(false);
 		processor.resolveArgument(paramRequestBodyString, mavContainer, webRequest, null);
 	}
@@ -202,7 +200,7 @@ public class RequestResponseBodyMethodProcessorMockTests {
 	@Test(expected = HttpMediaTypeNotSupportedException.class)
 	public void resolveArgumentInvalidContentType() throws Exception {
 		this.servletRequest.setContentType("bad");
-		servletRequest.setContent("payload".getBytes(Charset.forName("UTF-8")));
+		servletRequest.setContent("payload".getBytes(StandardCharsets.UTF_8));
 		processor.resolveArgument(paramRequestBodyString, mavContainer, webRequest, null);
 	}
 
@@ -300,7 +298,7 @@ public class RequestResponseBodyMethodProcessorMockTests {
 
 	@Test
 	public void handleReturnTypeResource() throws Exception {
-		Resource returnValue = new ByteArrayResource("Content".getBytes(Charset.forName("UTF-8")));
+		Resource returnValue = new ByteArrayResource("Content".getBytes(StandardCharsets.UTF_8));
 
 		given(resourceMessageConverter.canWrite(ByteArrayResource.class, null)).willReturn(true);
 		given(resourceMessageConverter.getSupportedMediaTypes()).willReturn(Collections.singletonList(MediaType.ALL));
@@ -311,37 +309,6 @@ public class RequestResponseBodyMethodProcessorMockTests {
 		then(resourceMessageConverter).should(times(1)).write(any(ByteArrayResource.class),
 				eq(MediaType.APPLICATION_OCTET_STREAM), any(HttpOutputMessage.class));
 		assertEquals(200, servletResponse.getStatus());
-	}
-
-	@Test
-	public void handleReturnTypeResourceByteRange() throws Exception {
-		Resource returnValue = new ByteArrayResource("Content".getBytes(Charset.forName("UTF-8")));
-		servletRequest.addHeader("Range", "bytes=0-5");
-
-		given(resourceMessageConverter.canWrite(HttpRangeResource.class, null)).willReturn(true);
-		given(resourceMessageConverter.getSupportedMediaTypes()).willReturn(Collections.singletonList(MediaType.ALL));
-		given(resourceMessageConverter.canWrite(HttpRangeResource.class, MediaType.APPLICATION_OCTET_STREAM)).willReturn(true);
-
-		processor.handleReturnValue(returnValue, returnTypeResource, mavContainer, webRequest);
-
-		then(resourceMessageConverter).should(times(1)).write(any(ByteArrayResource.class),
-				eq(MediaType.APPLICATION_OCTET_STREAM), any(HttpOutputMessage.class));
-		assertEquals(206, servletResponse.getStatus());
-	}
-
-	@Test
-	public void handleReturnTypeResourceIllegalByteRange() throws Exception {
-		Resource returnValue = new ByteArrayResource("Content".getBytes(Charset.forName("UTF-8")));
-		servletRequest.addHeader("Range", "illegal");
-
-		given(resourceMessageConverter.canWrite(ByteArrayResource.class, null)).willReturn(true);
-		given(resourceMessageConverter.getSupportedMediaTypes()).willReturn(Collections.singletonList(MediaType.ALL));
-
-		processor.handleReturnValue(returnValue, returnTypeResource, mavContainer, webRequest);
-
-		then(resourceMessageConverter).should(never()).write(any(ByteArrayResource.class),
-				eq(MediaType.APPLICATION_OCTET_STREAM), any(HttpOutputMessage.class));
-		assertEquals(416, servletResponse.getStatus());
 	}
 
 	// SPR-9841

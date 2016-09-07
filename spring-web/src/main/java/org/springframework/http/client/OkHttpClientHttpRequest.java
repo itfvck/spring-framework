@@ -26,14 +26,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 
 /**
- * {@link ClientHttpRequest} implementation that uses OkHttp to execute requests.
+ * {@link ClientHttpRequest} implementation that uses OkHttp 2.x to execute requests.
  *
  * <p>Created via the {@link OkHttpClientHttpRequestFactory}.
  *
  * @author Luciano Leggieri
  * @author Arjen Poutsma
  * @since 4.2
+ * @see org.springframework.http.client.OkHttp3ClientHttpRequest
+ * @deprecated as of Spring 5.0, in favor of OkHttp 3.x
  */
+@Deprecated
 class OkHttpClientHttpRequest extends AbstractBufferingClientHttpRequest {
 
 	private final OkHttpClient client;

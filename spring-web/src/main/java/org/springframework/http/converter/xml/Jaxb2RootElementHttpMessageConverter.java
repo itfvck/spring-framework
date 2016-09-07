@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import org.xml.sax.EntityResolver;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
-import org.xml.sax.helpers.XMLReaderFactory;
 
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.http.HttpHeaders;
@@ -51,7 +50,7 @@ import org.springframework.util.ClassUtils;
  * HttpMessageConverter} that can read and write XML using JAXB2.
  *
  * <p>This converter can read classes annotated with {@link XmlRootElement} and
- * {@link XmlType}, and write classes annotated with with {@link XmlRootElement},
+ * {@link XmlType}, and write classes annotated with {@link XmlRootElement},
  * or subclasses thereof.
  *
  * <p>Note that if using Spring's Marshaller/Unmarshaller abstractions from the
@@ -154,12 +153,13 @@ public class Jaxb2RootElementHttpMessageConverter extends AbstractJaxb2HttpMessa
 		}
 	}
 
+	@SuppressWarnings("deprecation")  // on JDK 9
 	protected Source processSource(Source source) {
 		if (source instanceof StreamSource) {
 			StreamSource streamSource = (StreamSource) source;
 			InputSource inputSource = new InputSource(streamSource.getInputStream());
 			try {
-				XMLReader xmlReader = XMLReaderFactory.createXMLReader();
+				XMLReader xmlReader = org.xml.sax.helpers.XMLReaderFactory.createXMLReader();
 				xmlReader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", !isSupportDtd());
 				String featureName = "http://xml.org/sax/features/external-general-entities";
 				xmlReader.setFeature(featureName, isProcessExternalEntities());
@@ -195,8 +195,8 @@ public class Jaxb2RootElementHttpMessageConverter extends AbstractJaxb2HttpMessa
 	}
 
 	private void setCharset(MediaType contentType, Marshaller marshaller) throws PropertyException {
-		if (contentType != null && contentType.getCharSet() != null) {
-			marshaller.setProperty(Marshaller.JAXB_ENCODING, contentType.getCharSet().name());
+		if (contentType != null && contentType.getCharset() != null) {
+			marshaller.setProperty(Marshaller.JAXB_ENCODING, contentType.getCharset().name());
 		}
 	}
 

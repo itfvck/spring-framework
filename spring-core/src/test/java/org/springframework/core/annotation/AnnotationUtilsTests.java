@@ -1357,11 +1357,6 @@ public class AnnotationUtilsTests {
 		assertNotNull(synthesizedWebMapping2);
 
 		assertThat(webMappingWithAliases.toString(), is(not(synthesizedWebMapping1.toString())));
-
-		// The unsynthesized annotation for handleMappedWithSamePathAndValueAttributes()
-		// should produce the same toString() results as synthesized annotations for
-		// handleMappedWithPathAttribute()
-		assertToStringForWebMappingWithPathAndValue(webMappingWithPathAndValue);
 		assertToStringForWebMappingWithPathAndValue(synthesizedWebMapping1);
 		assertToStringForWebMappingWithPathAndValue(synthesizedWebMapping2);
 	}
@@ -2121,12 +2116,12 @@ public class AnnotationUtilsTests {
 
 	@ContextConfig
 	@Retention(RetentionPolicy.RUNTIME)
-	@interface ImplicitAliasesContextConfig {
+	public @interface ImplicitAliasesContextConfig {
 
 		@AliasFor(annotation = ContextConfig.class, attribute = "location")
 		String xmlFile() default "";
 
-		@AliasFor(annotation = ContextConfig.class, value = "location")
+		@AliasFor(annotation = ContextConfig.class, attribute = "location")
 		String groovyScript() default "";
 
 		@AliasFor(annotation = ContextConfig.class, attribute = "location")

@@ -84,7 +84,7 @@ class CacheAdviceParser extends AbstractSingleBeanDefinitionParser {
 	}
 
 	private List<RootBeanDefinition> parseDefinitionsSources(List<Element> definitions, ParserContext parserContext) {
-		ManagedList<RootBeanDefinition> defs = new ManagedList<RootBeanDefinition>(definitions.size());
+		ManagedList<RootBeanDefinition> defs = new ManagedList<>(definitions.size());
 
 		// extract default param for the definition
 		for (Element element : definitions) {
@@ -98,7 +98,7 @@ class CacheAdviceParser extends AbstractSingleBeanDefinitionParser {
 		Props prop = new Props(definition);
 		// add cacheable first
 
-		ManagedMap<TypedStringValue, Collection<CacheOperation>> cacheOpMap = new ManagedMap<TypedStringValue, Collection<CacheOperation>>();
+		ManagedMap<TypedStringValue, Collection<CacheOperation>> cacheOpMap = new ManagedMap<>();
 		cacheOpMap.setSource(parserContext.extractSource(definition));
 
 		List<Element> cacheableCacheMethods = DomUtils.getChildElementsByTagName(definition, CACHEABLE_ELEMENT);
@@ -114,7 +114,7 @@ class CacheAdviceParser extends AbstractSingleBeanDefinitionParser {
 
 			Collection<CacheOperation> col = cacheOpMap.get(nameHolder);
 			if (col == null) {
-				col = new ArrayList<CacheOperation>(2);
+				col = new ArrayList<>(2);
 				cacheOpMap.put(nameHolder, col);
 			}
 			col.add(builder.build());
@@ -141,7 +141,7 @@ class CacheAdviceParser extends AbstractSingleBeanDefinitionParser {
 
 			Collection<CacheOperation> col = cacheOpMap.get(nameHolder);
 			if (col == null) {
-				col = new ArrayList<CacheOperation>(2);
+				col = new ArrayList<>(2);
 				cacheOpMap.put(nameHolder, col);
 			}
 			col.add(builder.build());
@@ -159,7 +159,7 @@ class CacheAdviceParser extends AbstractSingleBeanDefinitionParser {
 
 			Collection<CacheOperation> col = cacheOpMap.get(nameHolder);
 			if (col == null) {
-				col = new ArrayList<CacheOperation>(2);
+				col = new ArrayList<>(2);
 				cacheOpMap.put(nameHolder, col);
 			}
 			col.add(builder.build());
@@ -221,7 +221,7 @@ class CacheAdviceParser extends AbstractSingleBeanDefinitionParser {
 			}
 			else {
 				if (this.caches == null) {
-					readerCtx.error("No cache specified specified for " + element.getNodeName(), element);
+					readerCtx.error("No cache specified for " + element.getNodeName(), element);
 				}
 			}
 			builder.setCacheNames(localCaches);

@@ -17,7 +17,7 @@
 package org.springframework.web.servlet.mvc.method.annotation;
 
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -26,7 +26,6 @@ import javax.servlet.http.Part;
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 
-import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -132,7 +131,7 @@ public class RequestPartMethodArgumentResolverTests {
 		resolver = new RequestPartMethodArgumentResolver(Collections.<HttpMessageConverter<?>>singletonList(messageConverter));
 		reset(messageConverter);
 
-		byte[] content = "doesn't matter as long as not empty".getBytes(Charset.forName("UTF-8"));
+		byte[] content = "doesn't matter as long as not empty".getBytes(StandardCharsets.UTF_8);
 
 		multipartFile1 = new MockMultipartFile("requestPart", "", "text/plain", content);
 		multipartFile2 = new MockMultipartFile("requestPart", "", "text/plain", content);

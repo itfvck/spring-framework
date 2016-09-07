@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,7 +90,7 @@ public class ResolvableType implements Serializable {
 	private static final ResolvableType[] EMPTY_TYPES_ARRAY = new ResolvableType[0];
 
 	private static final ConcurrentReferenceHashMap<ResolvableType, ResolvableType> cache =
-			new ConcurrentReferenceHashMap<ResolvableType, ResolvableType>(256);
+			new ConcurrentReferenceHashMap<>(256);
 
 
 	/**
@@ -276,7 +276,7 @@ public class ResolvableType implements Serializable {
 		WildcardBounds ourBounds = WildcardBounds.get(this);
 		WildcardBounds typeBounds = WildcardBounds.get(other);
 
-		// In the from X is assignable to <? extends Number>
+		// In the form X is assignable to <? extends Number>
 		if (typeBounds != null) {
 			return (ourBounds != null && ourBounds.isSameKind(typeBounds) &&
 					ourBounds.isAssignableFrom(typeBounds.getBounds()));
@@ -334,7 +334,7 @@ public class ResolvableType implements Serializable {
 				return false;
 			}
 			if (matchedBefore == null) {
-				matchedBefore = new IdentityHashMap<Type, Type>(1);
+				matchedBefore = new IdentityHashMap<>(1);
 			}
 			matchedBefore.put(this.type, other.type);
 			for (int i = 0; i < ourGenerics.length; i++) {
@@ -937,7 +937,7 @@ public class ResolvableType implements Serializable {
 	 * Return a {@link ResolvableType} for the specified {@link Class}, doing
 	 * assignability checks against the raw class only (analogous to
 	 * {@link Class#isAssignableFrom}, which this serves as a wrapper for.
-	 * For example: {@code ResolvableType.forClass(MyArrayList.class)}.
+	 * For example: {@code ResolvableType.forRawClass(List.class)}.
 	 * @param sourceClass the source class ({@code null} is semantically
 	 * equivalent to {@code Object.class} for typical use cases here}
 	 * @return a {@link ResolvableType} for the specified class
@@ -950,6 +950,11 @@ public class ResolvableType implements Serializable {
 			@Override
 			public boolean isAssignableFrom(Class<?> other) {
 				return ClassUtils.isAssignable(getRawClass(), other);
+			}
+			@Override
+			public boolean isAssignableFrom(ResolvableType other) {
+				Class<?> otherClass = other.getRawClass();
+				return (otherClass != null && ClassUtils.isAssignable(getRawClass(), otherClass));
 			}
 		};
 	}

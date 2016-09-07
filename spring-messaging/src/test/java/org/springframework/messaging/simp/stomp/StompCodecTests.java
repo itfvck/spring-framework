@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ import static org.junit.Assert.*;
  */
 public class StompCodecTests {
 
-	private final ArgumentCapturingConsumer<Message<byte[]>> consumer = new ArgumentCapturingConsumer<Message<byte[]>>();
+	private final ArgumentCapturingConsumer<Message<byte[]>> consumer = new ArgumentCapturingConsumer<>();
 
 	private final Function<Buffer, Message<byte[]>> decoder = new Reactor2StompCodec().decoder(consumer);
 
@@ -163,7 +163,7 @@ public class StompCodecTests {
 		assertEquals("alpha:bravo\r\n\\", headers.getFirstNativeHeader("a:\r\n\\b"));
 	}
 
-	@Test(expected=StompConversionException.class)
+	@Test(expected = StompConversionException.class)
 	public void decodeFrameBodyNotAllowed() {
 		decode("CONNECT\naccept-version:1.2\n\nThe body of the message\0");
 	}
@@ -175,7 +175,7 @@ public class StompCodecTests {
 
 		Buffer buffer = Buffer.wrap(frame1 + frame2);
 
-		final List<Message<byte[]>> messages = new ArrayList<Message<byte[]>>();
+		final List<Message<byte[]>> messages = new ArrayList<>();
 		new Reactor2StompCodec().decoder(messages::add).apply(buffer);
 
 		assertEquals(2, messages.size());
@@ -236,7 +236,7 @@ public class StompCodecTests {
 		assertIncompleteDecode("SEND\ncontent-type:text/plain;charset=U\n\nThe body\0");
 	}
 
-	@Test(expected=StompConversionException.class)
+	@Test(expected = StompConversionException.class)
 	public void decodeFrameWithIncorrectTerminator() {
 		decode("SEND\ncontent-length:23\n\nThe body of the message*");
 	}
@@ -247,7 +247,7 @@ public class StompCodecTests {
 
 		Buffer buffer = Buffer.wrap(frame);
 
-		final List<Message<byte[]>> messages = new ArrayList<Message<byte[]>>();
+		final List<Message<byte[]>> messages = new ArrayList<>();
 		new Reactor2StompCodec().decoder(messages::add).apply(buffer);
 
 		assertEquals(1, messages.size());
@@ -335,7 +335,7 @@ public class StompCodecTests {
 
 	private static final class ArgumentCapturingConsumer<T> implements Consumer<T> {
 
-		private final List<T> arguments = new ArrayList<T>();
+		private final List<T> arguments = new ArrayList<>();
 
 		@Override
 		public void accept(T t) {

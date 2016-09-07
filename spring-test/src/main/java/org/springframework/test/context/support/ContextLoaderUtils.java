@@ -81,13 +81,12 @@ abstract class ContextLoaderUtils {
 	 * (must not be {@code null})
 	 * @return the list of lists of configuration attributes for the specified class;
 	 * never {@code null}
-	 * @throws IllegalArgumentException if the supplied class is {@code null}; if
+	 * @throws IllegalArgumentException if the supplied class is {@code null}; or if
 	 * neither {@code @ContextConfiguration} nor {@code @ContextHierarchy} is
-	 * <em>present</em> on the supplied class; or if a test class or composed annotation
+	 * <em>present</em> on the supplied class
+	 * @throws IllegalStateException if a test class or composed annotation
 	 * in the class hierarchy declares both {@code @ContextConfiguration} and
 	 * {@code @ContextHierarchy} as top-level annotations.
-	 * @throws IllegalStateException if no class in the class hierarchy declares
-	 * {@code @ContextHierarchy}.
 	 * @since 3.2.2
 	 * @see #buildContextHierarchyMap(Class)
 	 * @see #resolveContextConfigurationAttributes(Class)
@@ -98,15 +97,13 @@ abstract class ContextLoaderUtils {
 
 		Class<ContextConfiguration> contextConfigType = ContextConfiguration.class;
 		Class<ContextHierarchy> contextHierarchyType = ContextHierarchy.class;
-		List<List<ContextConfigurationAttributes>> hierarchyAttributes = new ArrayList<List<ContextConfigurationAttributes>>();
+		List<List<ContextConfigurationAttributes>> hierarchyAttributes = new ArrayList<>();
 
 		UntypedAnnotationDescriptor desc =
 				findAnnotationDescriptorForTypes(testClass, contextConfigType, contextHierarchyType);
-		if (desc == null) {
-			throw new IllegalArgumentException(String.format(
+		Assert.notNull(desc, () -> String.format(
 					"Could not find an 'annotation declaring class' for annotation type [%s] or [%s] and test class [%s]",
 					contextConfigType.getName(), contextHierarchyType.getName(), testClass.getName()));
-		}
 
 		while (desc != null) {
 			Class<?> rootDeclaringClass = desc.getRootDeclaringClass();
@@ -123,7 +120,7 @@ abstract class ContextLoaderUtils {
 				throw new IllegalStateException(msg);
 			}
 
-			List<ContextConfigurationAttributes> configAttributesList = new ArrayList<ContextConfigurationAttributes>();
+			List<ContextConfigurationAttributes> configAttributesList = new ArrayList<>();
 
 			if (contextConfigDeclaredLocally) {
 				ContextConfiguration contextConfiguration = AnnotationUtils.synthesizeAnnotation(
@@ -179,7 +176,7 @@ abstract class ContextLoaderUtils {
 	 * @see #resolveContextHierarchyAttributes(Class)
 	 */
 	static Map<String, List<ContextConfigurationAttributes>> buildContextHierarchyMap(Class<?> testClass) {
-		final Map<String, List<ContextConfigurationAttributes>> map = new LinkedHashMap<String, List<ContextConfigurationAttributes>>();
+		final Map<String, List<ContextConfigurationAttributes>> map = new LinkedHashMap<>();
 		int hierarchyLevel = 1;
 
 		for (List<ContextConfigurationAttributes> configAttributesList : resolveContextHierarchyAttributes(testClass)) {
@@ -194,7 +191,7 @@ abstract class ContextLoaderUtils {
 				// Encountered a new context hierarchy level?
 				if (!map.containsKey(name)) {
 					hierarchyLevel++;
-					map.put(name, new ArrayList<ContextConfigurationAttributes>());
+					map.put(name, new ArrayList<>());
 				}
 
 				map.get(name).add(configAttributes);
@@ -202,7 +199,7 @@ abstract class ContextLoaderUtils {
 		}
 
 		// Check for uniqueness
-		Set<List<ContextConfigurationAttributes>> set = new HashSet<List<ContextConfigurationAttributes>>(map.values());
+		Set<List<ContextConfigurationAttributes>> set = new HashSet<>(map.values());
 		if (set.size() != map.size()) {
 			String msg = String.format("The @ContextConfiguration elements configured via @ContextHierarchy in " +
 					"test class [%s] and its superclasses must define unique contexts per hierarchy level.",
@@ -234,15 +231,13 @@ abstract class ContextLoaderUtils {
 	static List<ContextConfigurationAttributes> resolveContextConfigurationAttributes(Class<?> testClass) {
 		Assert.notNull(testClass, "Class must not be null");
 
-		List<ContextConfigurationAttributes> attributesList = new ArrayList<ContextConfigurationAttributes>();
+		List<ContextConfigurationAttributes> attributesList = new ArrayList<>();
 		Class<ContextConfiguration> annotationType = ContextConfiguration.class;
 
 		AnnotationDescriptor<ContextConfiguration> descriptor = findAnnotationDescriptor(testClass, annotationType);
-		if (descriptor == null) {
-			throw new IllegalArgumentException(String.format(
+		Assert.notNull(descriptor, () -> String.format(
 					"Could not find an 'annotation declaring class' for annotation type [%s] and class [%s]",
 					annotationType.getName(), testClass.getName()));
-		}
 
 		while (descriptor != null) {
 			convertContextConfigToConfigAttributesAndAddToList(descriptor.synthesizeAnnotation(),

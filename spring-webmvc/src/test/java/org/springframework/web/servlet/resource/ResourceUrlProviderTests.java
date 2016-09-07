@@ -58,6 +58,7 @@ public class ResourceUrlProviderTests {
 	public void setUp() throws Exception {
 		this.locations.add(new ClassPathResource("test/", getClass()));
 		this.locations.add(new ClassPathResource("testalternatepath/", getClass()));
+		this.handler.setServletContext(new MockServletContext());
 		this.handler.setLocations(locations);
 		this.handler.afterPropertiesSet();
 		this.handlerMap.put("/resources/**", this.handler);
@@ -77,8 +78,9 @@ public class ResourceUrlProviderTests {
 		request.setContextPath("/");
 		request.setRequestURI("/");
 
-		String url = this.urlProvider.getForRequestUrl(request, "/resources/foo.css?foo=bar&url=http://example.org");
-		assertEquals("/resources/foo.css?foo=bar&url=http://example.org", url);
+		String url = "/resources/foo.css?foo=bar&url=http://example.org";
+		String resolvedUrl = this.urlProvider.getForRequestUrl(request, url);
+		assertEquals("/resources/foo.css?foo=bar&url=http://example.org", resolvedUrl);
 	}
 
 	@Test
@@ -131,8 +133,9 @@ public class ResourceUrlProviderTests {
 	}
 
 
-	@Configuration @SuppressWarnings("unused")
-	public static class HandlerMappingConfiguration {
+	@Configuration
+	@SuppressWarnings({"unused", "WeakerAccess"})
+	static class HandlerMappingConfiguration {
 
 		@Bean
 		public SimpleUrlHandlerMapping simpleUrlHandlerMapping() {

@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import javax.servlet.DispatcherType;
 import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpHeaders;
@@ -39,8 +40,8 @@ import org.springframework.web.cors.CorsUtils;
  */
 public final class RequestMethodsRequestCondition extends AbstractRequestCondition<RequestMethodsRequestCondition> {
 
-	private static final RequestMethodsRequestCondition HEAD_CONDITION =
-			new RequestMethodsRequestCondition(RequestMethod.HEAD);
+	private static final RequestMethodsRequestCondition GET_CONDITION =
+			new RequestMethodsRequestCondition(RequestMethod.GET);
 
 
 	private final Set<RequestMethod> methods;
@@ -56,7 +57,7 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	}
 
 	private RequestMethodsRequestCondition(Collection<RequestMethod> requestMethods) {
-		this.methods = Collections.unmodifiableSet(new LinkedHashSet<RequestMethod>(requestMethods));
+		this.methods = Collections.unmodifiableSet(new LinkedHashSet<>(requestMethods));
 	}
 
 
@@ -88,7 +89,7 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	 */
 	@Override
 	public RequestMethodsRequestCondition combine(RequestMethodsRequestCondition other) {
-		Set<RequestMethod> set = new LinkedHashSet<RequestMethod>(this.methods);
+		Set<RequestMethod> set = new LinkedHashSet<>(this.methods);
 		set.addAll(other.methods);
 		return new RequestMethodsRequestCondition(set);
 	}
@@ -109,7 +110,9 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 		}
 
 		if (getMethods().isEmpty()) {
-			if (RequestMethod.OPTIONS.name().equals(request.getMethod())) {
+			if (RequestMethod.OPTIONS.name().equals(request.getMethod()) &&
+					!DispatcherType.ERROR.equals(request.getDispatcherType())) {
+
 				return null; // No implicit match for OPTIONS (we handle it)
 			}
 			return this;
@@ -140,7 +143,7 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 				}
 			}
 			if (httpMethod == HttpMethod.HEAD && getMethods().contains(RequestMethod.GET)) {
-				return HEAD_CONDITION;
+				return GET_CONDITION;
 			}
 		}
 		return null;
@@ -159,7 +162,18 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	 */
 	@Override
 	public int compareTo(RequestMethodsRequestCondition other, HttpServletRequest request) {
-		return (other.methods.size() - this.methods.size());
+		if (other.methods.size() != this.methods.size()) {
+			return other.methods.size() - this.methods.size();
+		}
+		else if (this.methods.size() == 1) {
+			if (this.methods.contains(RequestMethod.HEAD) && other.methods.contains(RequestMethod.GET)) {
+				return -1;
+			}
+			else if (this.methods.contains(RequestMethod.GET) && other.methods.contains(RequestMethod.HEAD)) {
+				return 1;
+			}
+		}
+		return 0;
 	}
 
 }

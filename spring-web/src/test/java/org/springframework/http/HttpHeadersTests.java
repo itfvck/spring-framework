@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,11 @@
 
 package org.springframework.http;
 
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -30,20 +32,17 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 import org.hamcrest.Matchers;
-
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
+import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.*;
 
 /**
  * Unit tests for {@link org.springframework.http.HttpHeaders}.
  *
  * @author Arjen Poutsma
  * @author Sebastien Deleuze
+ * @author Brian Clozel
  */
 public class HttpHeadersTests {
 
@@ -51,10 +50,17 @@ public class HttpHeadersTests {
 
 
 	@Test
+	public void getFirst() {
+		headers.add(HttpHeaders.CACHE_CONTROL, "max-age=1000, public");
+		headers.add(HttpHeaders.CACHE_CONTROL, "s-maxage=1000");
+		assertThat(headers.getFirst(HttpHeaders.CACHE_CONTROL), is("max-age=1000, public"));
+	}
+
+	@Test
 	public void accept() {
 		MediaType mediaType1 = new MediaType("text", "html");
 		MediaType mediaType2 = new MediaType("text", "plain");
-		List<MediaType> mediaTypes = new ArrayList<MediaType>(2);
+		List<MediaType> mediaTypes = new ArrayList<>(2);
 		mediaTypes.add(mediaType1);
 		mediaTypes.add(mediaType2);
 		headers.setAccept(mediaTypes);
@@ -63,18 +69,27 @@ public class HttpHeadersTests {
 	}
 
 	@Test  // SPR-9655
-	public void acceptIPlanet() {
+	public void acceptWithMultipleHeaderValues() {
 		headers.add("Accept", "text/html");
 		headers.add("Accept", "text/plain");
 		List<MediaType> expected = Arrays.asList(new MediaType("text", "html"), new MediaType("text", "plain"));
 		assertEquals("Invalid Accept header", expected, headers.getAccept());
 	}
 
+	@Test  // SPR-14506
+	public void acceptWithMultipleCommaSeparatedHeaderValues() {
+		headers.add("Accept", "text/html,text/pdf");
+		headers.add("Accept", "text/plain,text/csv");
+		List<MediaType> expected = Arrays.asList(new MediaType("text", "html"), new MediaType("text", "pdf"),
+				new MediaType("text", "plain"), new MediaType("text", "csv"));
+		assertEquals("Invalid Accept header", expected, headers.getAccept());
+	}
+
 	@Test
 	public void acceptCharsets() {
-		Charset charset1 = Charset.forName("UTF-8");
-		Charset charset2 = Charset.forName("ISO-8859-1");
-		List<Charset> charsets = new ArrayList<Charset>(2);
+		Charset charset1 = StandardCharsets.UTF_8;
+		Charset charset2 = StandardCharsets.ISO_8859_1;
+		List<Charset> charsets = new ArrayList<>(2);
 		charsets.add(charset1);
 		charsets.add(charset2);
 		headers.setAcceptCharset(charsets);
@@ -85,7 +100,7 @@ public class HttpHeadersTests {
 	@Test
 	public void acceptCharsetWildcard() {
 		headers.set("Accept-Charset", "ISO-8859-1,utf-8;q=0.7,*;q=0.7");
-		assertEquals("Invalid Accept header", Arrays.asList(Charset.forName("ISO-8859-1"), Charset.forName("UTF-8")),
+		assertEquals("Invalid Accept header", Arrays.asList(StandardCharsets.ISO_8859_1, StandardCharsets.UTF_8),
 				headers.getAcceptCharset());
 	}
 
@@ -107,7 +122,7 @@ public class HttpHeadersTests {
 
 	@Test
 	public void contentType() {
-		MediaType contentType = new MediaType("text", "html", Charset.forName("UTF-8"));
+		MediaType contentType = new MediaType("text", "html", StandardCharsets.UTF_8);
 		headers.setContentType(contentType);
 		assertEquals("Invalid Content-Type header", contentType, headers.getContentType());
 		assertEquals("Invalid Content-Type header", "text/html;charset=UTF-8", headers.getFirst("Content-Type"));
@@ -129,12 +144,51 @@ public class HttpHeadersTests {
 		assertEquals("Invalid ETag header", "\"v2.6\"", headers.getFirst("ETag"));
 	}
 
+	@Test
+	public void host() {
+		InetSocketAddress host = InetSocketAddress.createUnresolved("localhost", 8080);
+		headers.setHost(host);
+		assertEquals("Invalid Host header", host, headers.getHost());
+		assertEquals("Invalid Host header", "localhost:8080", headers.getFirst("Host"));
+	}
+
+	@Test
+	public void hostNoPort() {
+		InetSocketAddress host = InetSocketAddress.createUnresolved("localhost", 0);
+		headers.setHost(host);
+		assertEquals("Invalid Host header", host, headers.getHost());
+		assertEquals("Invalid Host header", "localhost", headers.getFirst("Host"));
+	}
+
 	@Test(expected = IllegalArgumentException.class)
 	public void illegalETag() {
 		String eTag = "v2.6";
 		headers.setETag(eTag);
 		assertEquals("Invalid ETag header", eTag, headers.getETag());
 		assertEquals("Invalid ETag header", "\"v2.6\"", headers.getFirst("ETag"));
+	}
+
+	@Test
+	public void ifMatch() {
+		String ifMatch = "\"v2.6\"";
+		headers.setIfMatch(ifMatch);
+		assertEquals("Invalid If-Match header", ifMatch, headers.getIfMatch().get(0));
+		assertEquals("Invalid If-Match header", "\"v2.6\"", headers.getFirst("If-Match"));
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void ifMatchIllegalHeader() {
+		headers.setIfMatch("Illegal");
+		headers.getIfMatch();
+	}
+
+	@Test
+	public void ifMatchMultipleHeaders() {
+		headers.add(HttpHeaders.IF_MATCH, "\"v2,0\"");
+		headers.add(HttpHeaders.IF_MATCH, "W/\"v2,1\", \"v2,2\"");
+		assertEquals("Invalid If-Match header", "\"v2,0\"", headers.get(HttpHeaders.IF_MATCH).get(0));
+		assertEquals("Invalid If-Match header", "W/\"v2,1\", \"v2,2\"", headers.get(HttpHeaders.IF_MATCH).get(1));
+		assertThat(headers.getIfMatch(), Matchers.contains("\"v2,0\"", "W/\"v2,1\"", "\"v2,2\""));
 	}
 
 	@Test
@@ -146,15 +200,23 @@ public class HttpHeadersTests {
 	}
 
 	@Test
+	public void ifNoneMatchWildCard() {
+		String ifNoneMatch = "*";
+		headers.setIfNoneMatch(ifNoneMatch);
+		assertEquals("Invalid If-None-Match header", ifNoneMatch, headers.getIfNoneMatch().get(0));
+		assertEquals("Invalid If-None-Match header", "*", headers.getFirst("If-None-Match"));
+	}
+
+	@Test
 	public void ifNoneMatchList() {
 		String ifNoneMatch1 = "\"v2.6\"";
-		String ifNoneMatch2 = "\"v2.7\"";
-		List<String> ifNoneMatchList = new ArrayList<String>(2);
+		String ifNoneMatch2 = "\"v2.7\", \"v2.8\"";
+		List<String> ifNoneMatchList = new ArrayList<>(2);
 		ifNoneMatchList.add(ifNoneMatch1);
 		ifNoneMatchList.add(ifNoneMatch2);
 		headers.setIfNoneMatch(ifNoneMatchList);
-		assertEquals("Invalid If-None-Match header", ifNoneMatchList, headers.getIfNoneMatch());
-		assertEquals("Invalid If-None-Match header", "\"v2.6\", \"v2.7\"", headers.getFirst("If-None-Match"));
+		assertThat(headers.getIfNoneMatch(), Matchers.contains("\"v2.6\"", "\"v2.7\"", "\"v2.8\""));
+		assertEquals("Invalid If-None-Match header", "\"v2.6\", \"v2.7\", \"v2.8\"", headers.getFirst("If-None-Match"));
 	}
 
 	@Test
@@ -215,9 +277,7 @@ public class HttpHeadersTests {
 		assertEquals("Invalid Expires header", "Thu, 18 Dec 2008 10:20:00 GMT", headers.getFirst("expires"));
 	}
 
-	// SPR-10648 (example is from INT-3063)
-
-	@Test
+	@Test  // SPR-10648 (example is from INT-3063)
 	public void expiresInvalidDate() {
 		headers.set("Expires", "-1");
 		assertEquals(-1, headers.getExpires());
@@ -232,6 +292,18 @@ public class HttpHeadersTests {
 		assertEquals("Invalid If-Modified-Since header", date, headers.getIfModifiedSince());
 		assertEquals("Invalid If-Modified-Since header", "Thu, 18 Dec 2008 10:20:00 GMT",
 				headers.getFirst("if-modified-since"));
+	}
+
+	@Test  // SPR-14144
+	public void invalidIfModifiedSinceHeader() {
+		headers.set(HttpHeaders.IF_MODIFIED_SINCE, "0");
+		assertEquals(-1, headers.getIfModifiedSince());
+
+		headers.set(HttpHeaders.IF_MODIFIED_SINCE, "-1");
+		assertEquals(-1, headers.getIfModifiedSince());
+
+		headers.set(HttpHeaders.IF_MODIFIED_SINCE, "XXX");
+		assertEquals(-1, headers.getIfModifiedSince());
 	}
 
 	@Test
@@ -251,6 +323,13 @@ public class HttpHeadersTests {
 	}
 
 	@Test
+	public void cacheControlAllValues() {
+		headers.add(HttpHeaders.CACHE_CONTROL, "max-age=1000, public");
+		headers.add(HttpHeaders.CACHE_CONTROL, "s-maxage=1000");
+		assertThat(headers.getCacheControl(), is("max-age=1000, public, s-maxage=1000"));
+	}
+
+	@Test
 	public void contentDisposition() {
 		headers.setContentDispositionFormData("name", null);
 		assertEquals("Invalid Content-Disposition header", "form-data; name=\"name\"",
@@ -258,6 +337,11 @@ public class HttpHeadersTests {
 
 		headers.setContentDispositionFormData("name", "filename");
 		assertEquals("Invalid Content-Disposition header", "form-data; name=\"name\"; filename=\"filename\"",
+				headers.getFirst("Content-Disposition"));
+
+		headers.setContentDispositionFormData("name", "中文.txt", StandardCharsets.UTF_8);
+		assertEquals("Invalid Content-Disposition header",
+				"form-data; name=\"name\"; filename*=UTF-8''%E4%B8%AD%E6%96%87.txt",
 				headers.getFirst("Content-Disposition"));
 	}
 
@@ -283,6 +367,16 @@ public class HttpHeadersTests {
 		headers.setAccessControlAllowHeaders(Arrays.asList("header1", "header2"));
 		allowedHeaders = headers.getAccessControlAllowHeaders();
 		assertEquals(allowedHeaders, Arrays.asList("header1", "header2"));
+	}
+
+	@Test
+	public void accessControlAllowHeadersMultipleValues() {
+		List<String> allowedHeaders = headers.getAccessControlAllowHeaders();
+		assertThat(allowedHeaders, Matchers.emptyCollectionOf(String.class));
+		headers.add(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "header1, header2");
+		headers.add(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "header3");
+		allowedHeaders = headers.getAccessControlAllowHeaders();
+		assertEquals(Arrays.asList("header1", "header2", "header3"), allowedHeaders);
 	}
 
 	@Test
@@ -331,6 +425,20 @@ public class HttpHeadersTests {
 		assertNull(headers.getAccessControlRequestMethod());
 		headers.setAccessControlRequestMethod(HttpMethod.POST);
 		assertEquals(HttpMethod.POST, headers.getAccessControlRequestMethod());
+	}
+
+	@Test  // SPR-14547
+	public void encodeHeaderFieldParam() {
+		String result = HttpHeaders.encodeHeaderFieldParam("test.txt", StandardCharsets.US_ASCII);
+		assertEquals("test.txt", result);
+
+		result = HttpHeaders.encodeHeaderFieldParam("中文.txt", StandardCharsets.UTF_8);
+		assertEquals("UTF-8''%E4%B8%AD%E6%96%87.txt", result);
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void encodeHeaderFieldParamInvalidCharset() {
+		HttpHeaders.encodeHeaderFieldParam("test", StandardCharsets.UTF_16);
 	}
 
 }

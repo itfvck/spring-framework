@@ -36,7 +36,7 @@ import java.util.Map;
 @SuppressWarnings("serial")
 public class LinkedCaseInsensitiveMap<V> extends LinkedHashMap<String, V> {
 
-	private final Map<String, String> caseInsensitiveKeys;
+	private Map<String, String> caseInsensitiveKeys;
 
 	private final Locale locale;
 
@@ -57,7 +57,7 @@ public class LinkedCaseInsensitiveMap<V> extends LinkedHashMap<String, V> {
 	 */
 	public LinkedCaseInsensitiveMap(Locale locale) {
 		super();
-		this.caseInsensitiveKeys = new HashMap<String, String>();
+		this.caseInsensitiveKeys = new HashMap<>();
 		this.locale = (locale != null ? locale : Locale.getDefault());
 	}
 
@@ -82,7 +82,7 @@ public class LinkedCaseInsensitiveMap<V> extends LinkedHashMap<String, V> {
 	 */
 	public LinkedCaseInsensitiveMap(int initialCapacity, Locale locale) {
 		super(initialCapacity);
-		this.caseInsensitiveKeys = new HashMap<String, String>(initialCapacity);
+		this.caseInsensitiveKeys = new HashMap<>(initialCapacity);
 		this.locale = (locale != null ? locale : Locale.getDefault());
 	}
 
@@ -149,6 +149,14 @@ public class LinkedCaseInsensitiveMap<V> extends LinkedHashMap<String, V> {
 	public void clear() {
 		this.caseInsensitiveKeys.clear();
 		super.clear();
+	}
+
+	@Override
+	@SuppressWarnings("unchecked")
+	public Object clone() {
+		LinkedCaseInsensitiveMap<V> copy = (LinkedCaseInsensitiveMap<V>) super.clone();
+		copy.caseInsensitiveKeys = new HashMap<>(this.caseInsensitiveKeys);
+		return copy;
 	}
 
 

@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import javax.validation.ConstraintViolation;
+import javax.validation.executable.ExecutableValidator;
 import javax.validation.metadata.BeanDescriptor;
 import javax.validation.metadata.ConstraintDescriptor;
 
@@ -50,7 +51,7 @@ import org.springframework.validation.SmartValidator;
  */
 public class SpringValidatorAdapter implements SmartValidator, javax.validation.Validator {
 
-	private static final Set<String> internalAnnotationAttributes = new HashSet<String>(3);
+	private static final Set<String> internalAnnotationAttributes = new HashSet<>(3);
 
 	static {
 		internalAnnotationAttributes.add("message");
@@ -97,7 +98,7 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 	@Override
 	public void validate(Object target, Errors errors, Object... validationHints) {
 		if (this.targetValidator != null) {
-			Set<Class<?>> groups = new LinkedHashSet<Class<?>>();
+			Set<Class<?>> groups = new LinkedHashSet<>();
 			if (validationHints != null) {
 				for (Object hint : validationHints) {
 					if (hint instanceof Class) {
@@ -191,9 +192,9 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 	 * Return FieldError arguments for a validation error on the given field.
 	 * Invoked for each violated constraint.
 	 * <p>The default implementation returns a first argument indicating the field name
-	 * (of type DefaultMessageSourceResolvable, with "objectName.field" and "field" as codes).
-	 * Afterwards, it adds all actual constraint annotation attributes (i.e. excluding
-	 * "message", "groups" and "payload") in alphabetical order of their attribute names.
+	 * (see {@link #getResolvableField}). Afterwards, it adds all actual constraint
+	 * annotation attributes (i.e. excluding "message", "groups" and "payload") in
+	 * alphabetical order of their attribute names.
 	 * <p>Can be overridden to e.g. add further attributes from the constraint descriptor.
 	 * @param objectName the name of the target object
 	 * @param field the field that caused the binding error
@@ -204,11 +205,10 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 	 * @see org.springframework.validation.DefaultBindingErrorProcessor#getArgumentsForBindError
 	 */
 	protected Object[] getArgumentsForConstraint(String objectName, String field, ConstraintDescriptor<?> descriptor) {
-		List<Object> arguments = new LinkedList<Object>();
-		String[] codes = new String[] {objectName + Errors.NESTED_PATH_SEPARATOR + field, field};
-		arguments.add(new DefaultMessageSourceResolvable(codes, field));
+		List<Object> arguments = new LinkedList<>();
+		arguments.add(getResolvableField(objectName, field));
 		// Using a TreeMap for alphabetical ordering of attribute names
-		Map<String, Object> attributesToExpose = new TreeMap<String, Object>();
+		Map<String, Object> attributesToExpose = new TreeMap<>();
 		for (Map.Entry<String, Object> entry : descriptor.getAttributes().entrySet()) {
 			String attributeName = entry.getKey();
 			Object attributeValue = entry.getValue();
@@ -221,6 +221,22 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 		}
 		arguments.addAll(attributesToExpose.values());
 		return arguments.toArray(new Object[arguments.size()]);
+	}
+
+	/**
+	 * Build a resolvable wrapper for the specified field, allowing to resolve the field's
+	 * name in a {@code MessageSource}.
+	 * <p>The default implementation returns a first argument indicating the field:
+	 * of type {@code DefaultMessageSourceResolvable}, with "objectName.field" and "field"
+	 * as codes, and with the plain field name as default message.
+	 * @param objectName the name of the target object
+	 * @param field the field that caused the binding error
+	 * @return a corresponding {@code MessageSourceResolvable} for the specified field
+	 * @since 4.3
+	 */
+	protected MessageSourceResolvable getResolvableField(String objectName, String field) {
+		String[] codes = new String[] {objectName + Errors.NESTED_PATH_SEPARATOR + field, field};
+		return new DefaultMessageSourceResolvable(codes, field);
 	}
 
 	/**
@@ -282,6 +298,11 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 	public <T> T unwrap(Class<T> type) {
 		Assert.state(this.targetValidator != null, "No target Validator set");
 		return (type != null ? this.targetValidator.unwrap(type) : (T) this.targetValidator);
+	}
+
+	@Override
+	public ExecutableValidator forExecutables() {
+		return this.targetValidator.forExecutables();
 	}
 
 

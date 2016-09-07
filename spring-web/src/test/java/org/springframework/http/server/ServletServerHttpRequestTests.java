@@ -17,7 +17,7 @@
 package org.springframework.http.server;
 
 import java.net.URI;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.junit.Before;
@@ -64,9 +64,7 @@ public class ServletServerHttpRequestTests {
 		assertEquals("Invalid uri", uri, request.getURI());
 	}
 
-	// SPR-13876
-
-	@Test
+	@Test  // SPR-13876
 	public void getUriWithEncoding() throws Exception {
         URI uri = new URI("https://example.com/%E4%B8%AD%E6%96%87" +
 				"?redirect=https%3A%2F%2Fgithub.com%2Fspring-projects%2Fspring-framework");
@@ -95,7 +93,7 @@ public class ServletServerHttpRequestTests {
 		assertEquals("Invalid header values returned", 2, headerValues.size());
 		assertTrue("Invalid header values returned", headerValues.contains(headerValue1));
 		assertTrue("Invalid header values returned", headerValues.contains(headerValue2));
-		assertEquals("Invalid Content-Type", new MediaType("text", "plain", Charset.forName("UTF-8")),
+		assertEquals("Invalid Content-Type", new MediaType("text", "plain", StandardCharsets.UTF_8),
 				headers.getContentType());
 	}
 

@@ -36,12 +36,15 @@ import org.springframework.util.StringUtils;
 
 /**
  * {@link ClientHttpRequestFactory} implementation that uses
- * <a href="http://square.github.io/okhttp/">OkHttp</a> to create requests.
+ * <a href="http://square.github.io/okhttp/">OkHttp</a> 2.x to create requests.
  *
  * @author Luciano Leggieri
  * @author Arjen Poutsma
  * @since 4.2
+ * @see org.springframework.http.client.OkHttp3ClientHttpRequestFactory
+ * @deprecated as of Spring 5.0, in favor of OkHttp 3.x
  */
+@Deprecated
 public class OkHttpClientHttpRequestFactory
 		implements ClientHttpRequestFactory, AsyncClientHttpRequestFactory, DisposableBean {
 

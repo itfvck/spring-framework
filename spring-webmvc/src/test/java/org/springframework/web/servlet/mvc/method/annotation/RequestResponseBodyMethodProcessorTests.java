@@ -240,6 +240,29 @@ public class RequestResponseBodyMethodProcessorTests {
 		assertEquals("Jad", result.getName());
 	}
 
+	@Test  // SPR-14470
+	public void resolveParameterizedWithTypeVariableArgument() throws Exception {
+		Method method = MyParameterizedControllerWithList.class.getMethod("handleDto", List.class);
+		HandlerMethod handlerMethod = new HandlerMethod(new MySimpleParameterizedControllerWithList(), method);
+		MethodParameter methodParam = handlerMethod.getMethodParameters()[0];
+
+		String content = "[{\"name\" : \"Jad\"}, {\"name\" : \"Robert\"}]";
+		this.servletRequest.setContent(content.getBytes("UTF-8"));
+		this.servletRequest.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+		List<HttpMessageConverter<?>> converters = new ArrayList<>();
+		converters.add(new MappingJackson2HttpMessageConverter());
+		RequestResponseBodyMethodProcessor processor = new RequestResponseBodyMethodProcessor(converters);
+
+		@SuppressWarnings("unchecked")
+		List<SimpleBean> result = (List<SimpleBean>)
+				processor.resolveArgument(methodParam, container, request, factory);
+
+		assertNotNull(result);
+		assertEquals("Jad", result.get(0).getName());
+		assertEquals("Robert", result.get(1).getName());
+	}
+
 	@Test  // SPR-11225
 	public void resolveArgumentTypeVariableWithNonGenericConverter() throws Exception {
 		Method method = MyParameterizedController.class.getMethod("handleDto", Identifiable.class);
@@ -669,6 +692,25 @@ public class RequestResponseBodyMethodProcessorTests {
 		assertEquals("UTF-8", this.servletResponse.getCharacterEncoding());
 	}
 
+	@Test  // SPR-14520
+	public void resolveArgumentTypeVariableWithGenericInterface() throws Exception {
+		this.servletRequest.setContent("\"foo\"".getBytes("UTF-8"));
+		this.servletRequest.setContentType(MediaType.APPLICATION_JSON_UTF8_VALUE);
+
+		Method method = MyControllerImplementingInterface.class.getMethod("handle", Object.class);
+		HandlerMethod handlerMethod = new HandlerMethod(new MyControllerImplementingInterface(), method);
+		MethodParameter methodParameter = handlerMethod.getMethodParameters()[0];
+
+		List<HttpMessageConverter<?>> converters = new ArrayList<>();
+		converters.add(new MappingJackson2HttpMessageConverter());
+
+		RequestResponseBodyMethodProcessor processor = new RequestResponseBodyMethodProcessor(converters);
+
+		String value = (String)processor.readWithMessageConverters(this.request, methodParameter,
+				methodParameter.getGenericParameterType());
+		assertEquals("foo", value);
+	}
+
 	private void assertContentDisposition(RequestResponseBodyMethodProcessor processor,
 			boolean expectContentDisposition, String requestURI, String comment) throws Exception {
 
@@ -723,6 +765,17 @@ public class RequestResponseBodyMethodProcessorTests {
 		Long getId();
 
 		void setId(Long id);
+	}
+
+	@SuppressWarnings("unused")
+	private static abstract class MyParameterizedControllerWithList<DTO extends Identifiable> {
+
+		public void handleDto(@RequestBody List<DTO> dto) {
+		}
+	}
+
+	@SuppressWarnings("unused")
+	private static class MySimpleParameterizedControllerWithList extends MyParameterizedControllerWithList<SimpleBean> {
 	}
 
 
@@ -975,6 +1028,15 @@ public class RequestResponseBodyMethodProcessorTests {
 
 			return body;
 		}
+	}
+
+	interface MappingInterface<A> {
+		default A handle(@RequestBody A arg) {
+			return arg;
+		}
+	}
+
+	static class MyControllerImplementingInterface implements MappingInterface<String> {
 	}
 
 }

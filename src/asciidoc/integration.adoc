@@ -377,6 +377,21 @@ advanced and easier-to-use functionality. Refer to
 http://hc.apache.org/httpcomponents-client-ga/[hc.apache.org/httpcomponents-client-ga/]
 for more information.
 
+[WARNING]
+====
+Be aware of vulnerabilities due to unsafe Java deserialization:
+Manipulated input streams could lead to unwanted code execution on the server
+during the deserialization step. As a consequence, do not expose HTTP invoker
+endpoints to untrusted clients but rather just between your own services.
+In general, we strongly recommend any other message format (e.g. JSON) instead.
+
+If you are concerned about security vulnerabilities due to Java serialization,
+consider the general-purpose serialization filter mechanism at the core JVM level,
+originally developed for JDK 9 but backported to JDK 8, 7 and 6 in the meantime:
+https://blogs.oracle.com/java-platform-group/entry/incoming_filter_serialization_data_a
+http://openjdk.java.net/jeps/290
+====
+
 
 
 [[remoting-httpinvoker-server]]
@@ -866,6 +881,8 @@ proxy will take care of forwarding the call to the server-side object via JMS.
 ----
 
 
+
+
 [[remoting-amqp]]
 === AMQP
 Refer to the {doc-spring-amqp}/html/_reference.html#remoting[Spring AMQP Reference Document
@@ -1001,21 +1018,21 @@ RestTemplate has an asynchronous counter-part: see <<rest-async-resttemplate>>.
 
 | HEAD
 | {api-spring-framework}/web/client/RestTemplate.html#headForHeaders(String,%20Object...)[headForHeaders(String
-  url, String... urlVariables)]
+  url, String... uriVariables)]
 
 | OPTIONS
 | {api-spring-framework}/web/client/RestTemplate.html#optionsForAllow(String,%20Object...)[optionsForAllow(String
-  url, String... urlVariables)]
+  url, String... uriVariables)]
 
 | POST
 | {api-spring-framework}/web/client/RestTemplate.html#postForLocation(String,%20Object,%20Object...)[postForLocation(String
-  url, Object request, String... urlVariables)]
+  url, Object request, String... uriVariables)]
   {api-spring-framework}/web/client/RestTemplate.html#postForObject(java.lang.String,%20java.lang.Object,%20java.lang.Class,%20java.lang.String...)[postForObject(String
   url, Object request, Class<T> responseType, String... uriVariables)]
 
 | PUT
 | {api-spring-framework}/web/client/RestTemplate.html#put(String,%20Object,%20Object...)[put(String
-  url, Object request, String...urlVariables)]
+  url, Object request, String...uriVariables)]
 
 | PATCH and others
 | {api-spring-framework}/web/client/RestTemplate.html#exchange(java.lang.String,%20org.springframework.http.HttpMethod,%20org.springframework.http.HttpEntity,%20java.lang.Class,%20java.lang.Object...)[exchange]
@@ -1050,8 +1067,8 @@ template are `ByteArrayHttpMessageConverter`, `StringHttpMessageConverter`,
 defaults using the `messageConverters()` bean property as would be required if using the
 `MarshallingHttpMessageConverter` or `MappingJackson2HttpMessageConverter`.
 
-Each method takes URI template arguments in two forms, either as a `String` variable
-length argument or a `Map<String,String>`. For example,
+Each method takes URI template arguments in two forms, either as a `String`
+variable-length argument or a `Map<String,String>`. For example,
 
 [source,java,indent=0]
 [subs="verbatim,quotes"]
@@ -1060,7 +1077,7 @@ length argument or a `Map<String,String>`. For example,
 			"http://example.com/hotels/{hotel}/bookings/{booking}", String.class,"42", "21");
 ----
 
-using variable length arguments and
+using variable-length arguments and
 
 [source,java,indent=0]
 [subs="verbatim,quotes"]
@@ -1087,6 +1104,7 @@ Note that the `java.net` implementation for HTTP requests may raise an exception
 accessing the status of a response that represents an error (e.g. 401). If this is an
 issue, switch to `HttpComponentsClientHttpRequestFactory` instead.
 ====
+
 The previous example using Apache HttpComponents `HttpClient` directly rewritten to use
 the `RestTemplate` is shown below
 
@@ -1124,6 +1142,7 @@ construct a `HttpComponentsClientHttpRequestFactory` like so:
     RestTemplate restTemplate = new RestTemplate(requestFactory);
 ----
 ====
+
 The general callback interface is `RequestCallback` and is called when the execute
 method is invoked.
 
@@ -1131,9 +1150,9 @@ method is invoked.
 [subs="verbatim,quotes"]
 ----
 	public <T> T execute(String url, HttpMethod method, RequestCallback requestCallback,
-			ResponseExtractor<T> responseExtractor, String... urlVariables)
+			ResponseExtractor<T> responseExtractor, String... uriVariables)
 
-	// also has an overload with urlVariables as a Map<String, String>.
+	// also has an overload with uriVariables as a Map<String, String>.
 ----
 
 The `RequestCallback` interface is defined as
@@ -1158,7 +1177,7 @@ other method arguments.
 For each of the main HTTP methods, the `RestTemplate` provides variants that either take
 a String URI or `java.net.URI` as the first argument.
 
-The String URI variants accept template arguments as a String variable length argument
+The String URI variants accept template arguments as a String variable-length argument
 or as a `Map<String,String>`. They also assume the URL String is not encoded and needs
 to be encoded. For example the following:
 
@@ -1637,58 +1656,8 @@ lookups simply provides consistent and more explicit EJB access configuration.
 
 
 
-[[ejb-implementation]]
-=== Using Spring's EJB implementation support classes
-
-
-
-[[ejb-implementation-ejb3]]
-==== EJB 3 injection interceptor
-For EJB 3 Session Beans and Message-Driven Beans, Spring provides a convenient
-interceptor that resolves Spring's `@Autowired` annotation in the EJB component
-class: `org.springframework.ejb.interceptor.SpringBeanAutowiringInterceptor`. This
-interceptor can be applied through an `@Interceptors` annotation in the EJB component
-class, or through an `interceptor-binding` XML element in the EJB deployment descriptor.
-
-[source,java,indent=0]
-[subs="verbatim,quotes"]
-----
-	@Stateless
-	@Interceptors(SpringBeanAutowiringInterceptor.class)
-	public class MyFacadeEJB implements MyFacadeLocal {
-
-		// automatically injected with a matching Spring bean
-		@Autowired
-		private MyComponent myComp;
-
-		// for business method, delegate to POJO service impl.
-		public String myFacadeMethod(...) {
-			return myComp.myMethod(...);
-		}
-
-		...
-
-	}
-----
-
-`SpringBeanAutowiringInterceptor` by default obtains target beans from a
-`ContextSingletonBeanFactoryLocator`, with the context defined in a bean definition file
-named `beanRefContext.xml`. By default, a single context definition is expected, which
-is obtained by type rather than by name. However, if you need to choose between multiple
-context definitions, a specific locator key is required. The locator key (i.e. the name
-of the context definition in `beanRefContext.xml`) can be explicitly specified either
-through overriding the `getBeanFactoryLocatorKey` method in a custom
-`SpringBeanAutowiringInterceptor` subclass.
-
-Alternatively, consider overriding `SpringBeanAutowiringInterceptor`'s `getBeanFactory`
-method, e.g. obtaining a shared `ApplicationContext` from a custom holder class.
-
-
-
-
 [[jms]]
 == JMS (Java Message Service)
-
 
 
 
@@ -2095,7 +2064,7 @@ details of how it is represented as a JMS message.
 The sandbox currently includes a `MapMessageConverter` which uses reflection to convert
 between a JavaBean and a `MapMessage`. Other popular implementation choices you might
 implement yourself are Converters that use an existing XML marshalling package, such as
-JAXB, Castor, XMLBeans, or XStream, to create a `TextMessage` representing the object.
+JAXB, Castor or XStream, to create a `TextMessage` representing the object.
 
 To accommodate the setting of a message's properties, headers, and body that can not be
 generically encapsulated inside a converter class, the `MessagePostProcessor` interface
@@ -2545,7 +2514,7 @@ be obtained from JNDI instead (using `<jee:jndi-lookup>`). The Spring-based mess
 listeners can then interact with the server-hosted `ResourceAdapter`, also using the
 server's built-in `WorkManager`.
 
-Please consult the JavaDoc for `JmsMessageEndpointManager`, `JmsActivationSpecConfig`,
+Please consult the javadoc for `JmsMessageEndpointManager`, `JmsActivationSpecConfig`,
 and `ResourceAdapterFactoryBean` for more details.
 
 Spring also provides a generic JCA message endpoint manager which is not tied to JMS:
@@ -2553,7 +2522,7 @@ Spring also provides a generic JCA message endpoint manager which is not tied to
 for using any message listener type (e.g. a CCI MessageListener) and any
 provider-specific ActivationSpec object. Check out your JCA provider's documentation to
 find out about the actual capabilities of your connector, and consult
-`GenericMessageEndpointManager`'s JavaDoc for the Spring-specific configuration details.
+`GenericMessageEndpointManager`'s javadoc for the Spring-specific configuration details.
 
 [NOTE]
 ====
@@ -2591,13 +2560,16 @@ what the <<jms-receiving-async-message-listener-adapter, `MessageListenerAdapter
 provides).
 
 The annotated endpoint infrastructure creates a message listener container
-behind the scenes for each annotated method, using a `JmsListenerContainerFactory`. Such
-container is not registered against the application context but can be easily
+behind the scenes for each annotated method, using a `JmsListenerContainerFactory`.
+Such a container is not registered against the application context but can be easily
 located for management purposes using the `JmsListenerEndpointRegistry` bean.
 
-TIP: `@JmsListener` is a _repeatable_ annotation so it is possible to associate several
-JMS destinations to the same method by adding additional `@JmsListener` declaration on
-it. For pre Java8 use cases, you can use `@JmsListeners`.
+[TIP]
+====
+`@JmsListener` is a _repeatable_ annotation on Java 8, so it is possible to associate
+several JMS destinations to the same method by adding additional `@JmsListener`
+declarations to it. On Java 6 and 7, you can use the `@JmsListeners` annotation.
+====
 
 [[jms-annotated-support]]
 ==== Enable listener endpoint annotations
@@ -2785,8 +2757,11 @@ as follow to automatically send a response:
 	}
 ----
 
-TIP: If you have several `@JmsListener`-annotated methods, you can also place the `@SendTo`
-annotation at class-level to share a default reply destination.
+[TIP]
+====
+If you have several `@JmsListener`-annotated methods, you can also place the `@SendTo`
+annotation at the class level to share a default reply destination.
+====
 
 If you need to set additional headers in a transport-independent manner, you could return a
 `Message` instead, something like:
@@ -2826,7 +2801,7 @@ example can be rewritten as follows:
 
 
 [[jms-namespace]]
-=== JMS Namespace Support
+=== JMS namespace support
 Spring provides an XML namespace for simplifying JMS configuration. To use the JMS
 namespace elements you will need to reference the JMS schema:
 
@@ -6006,7 +5981,6 @@ along with an inline image.
 
 [WARNING]
 ====
-
 Inline resources are added to the mime message using the specified `Content-ID` (
 `identifier1234` in the above example). The order in which you are adding the text and
 the resource are __very__ important. Be sure to __first add the text__ and after that
@@ -6372,7 +6346,7 @@ reference is provided for managing those methods annotated with `@Scheduled`.
 
 
 [[scheduling-annotation-support-scheduled]]
-==== The @Scheduled Annotation
+==== The @Scheduled annotation
 The `@Scheduled` annotation can be added to a method along with trigger metadata. For
 example, the following method would be invoked every 5 seconds with a fixed delay,
 meaning that the period will be measured from the completion time of each preceding
@@ -6430,7 +6404,6 @@ You can additionally use the `zone` attribute to specify the time zone in which 
 expression will be resolved.
 ====
 
-
 Notice that the methods to be scheduled must have void returns and must not expect any
 arguments. If the method needs to interact with other objects from the Application
 Context, then those would typically have been provided through dependency injection.
@@ -6451,7 +6424,7 @@ container and once through the `@Configurable` aspect, with the consequence of e
 
 
 [[scheduling-annotation-support-async]]
-==== The @Async Annotation
+==== The @Async annotation
 The `@Async` annotation can be provided on a method so that invocation of that method
 will occur asynchronously. In other words, the caller will return immediately upon
 invocation and the actual execution of the method will occur in a task that has been
@@ -6494,6 +6467,14 @@ asynchronous execution so that the caller can perform other tasks prior to calli
 		// this will be executed asynchronously
 	}
 ----
+
+[TIP]
+====
+`@Async` methods may not only declare a regular `java.util.concurrent.Future` return type
+but also Spring's `org.springframework.util.concurrent.ListenableFuture` or, as of Spring
+4.2, JDK 8's `java.util.concurrent.CompletableFuture`: for richer interaction with the
+asynchronous task and for immediate composition with further processing steps.
+====
 
 `@Async` can not be used in conjunction with lifecycle callbacks such as
 `@PostConstruct`. To asynchronously initialize Spring beans you currently have to use
@@ -6583,8 +6564,11 @@ however, the exception is uncaught and cannot be transmitted. For those cases, a
 By default, the exception is simply logged. A custom `AsyncUncaughtExceptionHandler` can
 be defined _via_ `AsyncConfigurer` or the `task:annotation-driven` XML element.
 
+
+
+
 [[scheduling-task-namespace]]
-=== The Task Namespace
+=== The task namespace
 Beginning with Spring 3.0, there is an XML namespace for configuring `TaskExecutor` and
 `TaskScheduler` instances. It also provides a convenient way to configure tasks to be
 scheduled with a trigger.

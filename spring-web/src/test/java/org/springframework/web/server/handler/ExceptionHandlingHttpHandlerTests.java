@@ -16,20 +16,17 @@
 
 package org.springframework.web.server.handler;
 
-import org.junit.Before;
+import java.util.Arrays;
+
 import org.junit.Test;
 import reactor.core.publisher.Mono;
 
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.test.MockServerHttpRequest;
-import org.springframework.mock.http.server.reactive.test.MockServerHttpResponse;
+import org.springframework.mock.http.server.reactive.test.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebExceptionHandler;
 import org.springframework.web.server.WebHandler;
-import org.springframework.web.server.adapter.DefaultServerWebExchange;
-import org.springframework.web.server.session.MockWebSessionManager;
-import org.springframework.web.server.session.WebSessionManager;
 
 import static org.junit.Assert.assertEquals;
 
@@ -39,21 +36,9 @@ import static org.junit.Assert.assertEquals;
  */
 public class ExceptionHandlingHttpHandlerTests {
 
-	private MockServerHttpResponse response;
+	private final MockServerWebExchange exchange = MockServerHttpRequest.get("http://localhost:8080").toExchange();
 
-	private ServerWebExchange exchange;
-
-	private WebHandler targetHandler;
-
-
-	@Before
-	public void setUp() throws Exception {
-		WebSessionManager sessionManager = new MockWebSessionManager();
-		MockServerHttpRequest request = new MockServerHttpRequest(HttpMethod.GET, "http://localhost:8080");
-		this.response = new MockServerHttpResponse();
-		this.exchange = new DefaultServerWebExchange(request, this.response, sessionManager);
-		this.targetHandler = new StubWebHandler(new IllegalStateException("boo"));
-	}
+	private final WebHandler targetHandler = new StubWebHandler(new IllegalStateException("boo"));
 
 
 	@Test
@@ -61,7 +46,7 @@ public class ExceptionHandlingHttpHandlerTests {
 		WebExceptionHandler exceptionHandler = new BadRequestExceptionHandler();
 		createWebHandler(exceptionHandler).handle(this.exchange).block();
 
-		assertEquals(HttpStatus.BAD_REQUEST, this.response.getStatusCode());
+		assertEquals(HttpStatus.BAD_REQUEST, this.exchange.getResponse().getStatusCode());
 	}
 
 	@Test
@@ -74,7 +59,7 @@ public class ExceptionHandlingHttpHandlerTests {
 		};
 		createWebHandler(exceptionHandlers).handle(this.exchange).block();
 
-		assertEquals(HttpStatus.BAD_REQUEST, this.response.getStatusCode());
+		assertEquals(HttpStatus.BAD_REQUEST, this.exchange.getResponse().getStatusCode());
 	}
 
 	@Test
@@ -82,7 +67,7 @@ public class ExceptionHandlingHttpHandlerTests {
 		WebExceptionHandler exceptionHandler = new UnresolvedExceptionHandler();
 		createWebHandler(exceptionHandler).handle(this.exchange).block();
 
-		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, this.response.getStatusCode());
+		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, this.exchange.getResponse().getStatusCode());
 	}
 
 	@Test
@@ -90,11 +75,11 @@ public class ExceptionHandlingHttpHandlerTests {
 		WebExceptionHandler exceptionHandler = new BadRequestExceptionHandler();
 		createWebHandler(exceptionHandler).handle(this.exchange).block();
 
-		assertEquals(HttpStatus.BAD_REQUEST, this.response.getStatusCode());
+		assertEquals(HttpStatus.BAD_REQUEST, this.exchange.getResponse().getStatusCode());
 	}
 
 	private WebHandler createWebHandler(WebExceptionHandler... handlers) {
-		return new ExceptionHandlingWebHandler(this.targetHandler, handlers);
+		return new ExceptionHandlingWebHandler(this.targetHandler, Arrays.asList(handlers));
 	}
 
 
@@ -105,11 +90,11 @@ public class ExceptionHandlingHttpHandlerTests {
 		private final boolean raise;
 
 
-		public StubWebHandler(RuntimeException exception) {
+		StubWebHandler(RuntimeException exception) {
 			this(exception, false);
 		}
 
-		public StubWebHandler(RuntimeException exception, boolean raise) {
+		StubWebHandler(RuntimeException exception, boolean raise) {
 			this.exception = exception;
 			this.raise = raise;
 		}

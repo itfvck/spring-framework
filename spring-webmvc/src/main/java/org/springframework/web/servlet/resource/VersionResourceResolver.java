@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.core.io.AbstractResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
 
@@ -93,7 +94,8 @@ public class VersionResourceResolver extends AbstractResourceResolver {
 	 * default strategy to use except when it cannot be, for example when using
 	 * JavaScript module loaders, use {@link #addFixedVersionStrategy} instead
 	 * for serving JavaScript files.
-	 * @param pathPatterns one or more resource URL path patterns
+	 * @param pathPatterns one or more resource URL path patterns,
+	 * relative to the pattern configured with the resource handler
 	 * @return the current instance for chained method invocation
 	 * @see ContentVersionStrategy
 	 */
@@ -115,7 +117,8 @@ public class VersionResourceResolver extends AbstractResourceResolver {
 	 * will also cofigure automatically a {@code "/v1.0.0/js/**"} with {@code "v1.0.0"} the
 	 * {@code version} String given as an argument.
 	 * @param version a version string
-	 * @param pathPatterns one or more resource URL path patterns
+	 * @param pathPatterns one or more resource URL path patterns,
+	 * relative to the pattern configured with the resource handler
 	 * @return the current instance for chained method invocation
 	 * @see FixedVersionStrategy
 	 */
@@ -136,7 +139,8 @@ public class VersionResourceResolver extends AbstractResourceResolver {
 	 * Register a custom VersionStrategy to apply to resource URLs that match the
 	 * given path patterns.
 	 * @param strategy the custom strategy
-	 * @param pathPatterns one or more resource URL path patterns
+	 * @param pathPatterns one or more resource URL path patterns,
+	 * relative to the pattern configured with the resource handler
 	 * @return the current instance for chained method invocation
 	 * @see VersionStrategy
 	 */
@@ -202,7 +206,7 @@ public class VersionResourceResolver extends AbstractResourceResolver {
 		if (StringUtils.hasText(baseUrl)) {
 			VersionStrategy versionStrategy = getStrategyForPath(resourceUrlPath);
 			if (versionStrategy == null) {
-				return null;
+				return baseUrl;
 			}
 			if (logger.isTraceEnabled()) {
 				logger.trace("Getting the original resource to determine version for path \"" + resourceUrlPath + "\"");
@@ -238,7 +242,7 @@ public class VersionResourceResolver extends AbstractResourceResolver {
 	}
 
 
-	private class FileNameVersionedResource extends AbstractResource implements VersionedResource {
+	private class FileNameVersionedResource extends AbstractResource implements HttpResource {
 
 		private final Resource original;
 
@@ -315,9 +319,18 @@ public class VersionResourceResolver extends AbstractResourceResolver {
 		}
 
 		@Override
-		public String getVersion() {
-			return this.version;
+		public HttpHeaders getResponseHeaders() {
+			HttpHeaders headers;
+			if(this.original instanceof HttpResource) {
+				headers = ((HttpResource) this.original).getResponseHeaders();
+			}
+			else {
+				headers = new HttpHeaders();
+			}
+			headers.setETag("\"" + this.version + "\"");
+			return headers;
 		}
+
 	}
 
 }

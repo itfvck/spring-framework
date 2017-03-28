@@ -20,7 +20,6 @@ import java.lang.reflect.Method;
 import java.util.Optional;
 
 import org.hamcrest.Matcher;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
@@ -30,19 +29,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.TestContextManager;
 import org.springframework.util.ReflectionUtils;
 
-import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.CoreMatchers.endsWith;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.expectThrows;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.hamcrest.MatcherAssert.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link DisabledIfCondition} that verify actual condition evaluation
@@ -76,11 +68,26 @@ class DisabledIfConditionTestCase {
 
 	@Test
 	void invalidExpressionEvaluationType() {
-		IllegalStateException exception = expectThrows(IllegalStateException.class,
-			() -> condition.evaluate(buildExtensionContext("nonBooleanOrStringExpression")));
+		String methodName = "nonBooleanOrStringExpression";
+		IllegalStateException exception = assertThrows(IllegalStateException.class,
+			() -> condition.evaluate(buildExtensionContext(methodName)));
+
+		Method method = ReflectionUtils.findMethod(getClass(), methodName);
 
 		assertThat(exception.getMessage(),
-			is(equalTo("@DisabledIf(\"#{6 * 7}\") must evaluate to a String or a Boolean, not java.lang.Integer")));
+			is(equalTo("@DisabledIf(\"#{6 * 7}\") on " + method + " must evaluate to a String or a Boolean, not java.lang.Integer")));
+	}
+
+	@Test
+	void unsupportedStringEvaluationValue() {
+		String methodName = "stringExpressionThatIsNeitherTrueNorFalse";
+		IllegalStateException exception = assertThrows(IllegalStateException.class,
+			() -> condition.evaluate(buildExtensionContext(methodName)));
+
+		Method method = ReflectionUtils.findMethod(getClass(), methodName);
+
+		assertThat(exception.getMessage(),
+			is(equalTo("@DisabledIf(\"#{'enigma'}\") on " + method + " must evaluate to \"true\" or \"false\", not \"enigma\"")));
 	}
 
 	@Test
@@ -116,7 +123,7 @@ class DisabledIfConditionTestCase {
 	}
 
 	private void assertExpressionIsBlank(String methodName) {
-		IllegalStateException exception = expectThrows(IllegalStateException.class,
+		IllegalStateException exception = assertThrows(IllegalStateException.class,
 			() -> condition.evaluate(buildExtensionContext(methodName)));
 
 		assertThat(exception.getMessage(), containsString("must not be blank"));
@@ -149,6 +156,10 @@ class DisabledIfConditionTestCase {
 
 	@DisabledIf("#{6 * 7}")
 	private void nonBooleanOrStringExpression() {
+	}
+
+	@DisabledIf("#{'enigma'}")
+	private void stringExpressionThatIsNeitherTrueNorFalse() {
 	}
 
 	@DisabledIf(expression = "#{6 * 7 == 42}", reason = "Because... 42!")

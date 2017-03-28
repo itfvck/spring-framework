@@ -21,6 +21,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.IntPredicate;
 
 import org.reactivestreams.Publisher;
@@ -59,32 +60,24 @@ public class StringDecoder extends AbstractDecoder<String> {
 
 	/**
 	 * Create a {@code StringDecoder} that decodes a bytes stream to a String stream
-	 * <p>By default, this decoder will split along new lines.
-	 */
-	public StringDecoder() {
-		this(true);
-	}
-
-	/**
-	 * Create a {@code StringDecoder} that decodes a bytes stream to a String stream
 	 * @param splitOnNewline whether this decoder should split the received data buffers
 	 * along newline characters
 	 */
-	public StringDecoder(boolean splitOnNewline) {
-		super(new MimeType("text", "*", DEFAULT_CHARSET), MimeTypeUtils.ALL);
+	private StringDecoder(boolean splitOnNewline, MimeType... mimeTypes) {
+		super(mimeTypes);
 		this.splitOnNewline = splitOnNewline;
 	}
 
 
 	@Override
-	public boolean canDecode(ResolvableType elementType, MimeType mimeType, Object... hints) {
-		return (super.canDecode(elementType, mimeType, hints) &&
+	public boolean canDecode(ResolvableType elementType, MimeType mimeType) {
+		return (super.canDecode(elementType, mimeType) &&
 				String.class.equals(elementType.getRawClass()));
 	}
 
 	@Override
 	public Flux<String> decode(Publisher<DataBuffer> inputStream, ResolvableType elementType,
-			MimeType mimeType, Object... hints) {
+			MimeType mimeType, Map<String, Object> hints) {
 
 		Flux<DataBuffer> inputFlux = Flux.from(inputStream);
 		if (this.splitOnNewline) {
@@ -95,7 +88,7 @@ public class StringDecoder extends AbstractDecoder<String> {
 
 	@Override
 	public Mono<String> decodeToMono(Publisher<DataBuffer> inputStream, ResolvableType elementType,
-			MimeType mimeType, Object... hints) {
+			MimeType mimeType, Map<String, Object> hints) {
 
 		return Flux.from(inputStream)
 				.reduce(DataBuffer::write)
@@ -133,6 +126,24 @@ public class StringDecoder extends AbstractDecoder<String> {
 		else {
 			return DEFAULT_CHARSET;
 		}
+	}
+
+
+	/**
+	 * Create a {@code StringDecoder} for {@code "text/plain"}.
+	 * @param splitOnNewline whether to split the byte stream into lines
+	 */
+	public static StringDecoder textPlainOnly(boolean splitOnNewline) {
+		return new StringDecoder(splitOnNewline, new MimeType("text", "plain", DEFAULT_CHARSET));
+	}
+
+	/**
+	 * Create a {@code StringDecoder} that supports all MIME types.
+	 * @param splitOnNewline whether to split the byte stream into lines
+	 */
+	public static StringDecoder allMimeTypes(boolean splitOnNewline) {
+		return new StringDecoder(splitOnNewline,
+				new MimeType("text", "plain", DEFAULT_CHARSET), MimeTypeUtils.ALL);
 	}
 
 }

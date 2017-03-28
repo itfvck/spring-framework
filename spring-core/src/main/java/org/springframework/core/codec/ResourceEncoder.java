@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,12 @@
 
 package org.springframework.core.codec;
 
+import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.channels.AsynchronousFileChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.file.StandardOpenOption;
+import java.util.Map;
 
 import reactor.core.publisher.Flux;
 
@@ -49,24 +53,41 @@ public class ResourceEncoder extends AbstractSingleValueEncoder<Resource> {
 	}
 
 	public ResourceEncoder(int bufferSize) {
-		super(MimeTypeUtils.ALL);
+		super(MimeTypeUtils.APPLICATION_OCTET_STREAM, MimeTypeUtils.ALL);
 		Assert.isTrue(bufferSize > 0, "'bufferSize' must be larger than 0");
 		this.bufferSize = bufferSize;
 	}
 
 
 	@Override
-	public boolean canEncode(ResolvableType elementType, MimeType mimeType, Object... hints) {
+	public boolean canEncode(ResolvableType elementType, MimeType mimeType) {
 		Class<?> clazz = elementType.getRawClass();
-		return (super.canEncode(elementType, mimeType, hints) && Resource.class.isAssignableFrom(clazz));
+		return (super.canEncode(elementType, mimeType) && Resource.class.isAssignableFrom(clazz));
 	}
 
 	@Override
 	protected Flux<DataBuffer> encode(Resource resource, DataBufferFactory dataBufferFactory,
-			ResolvableType type, MimeType mimeType, Object... hints) throws IOException {
+			ResolvableType type, MimeType mimeType, Map<String, Object> hints) {
 
-		InputStream is = resource.getInputStream();
-		return DataBufferUtils.read(is, dataBufferFactory, bufferSize);
+		try {
+			if (resource.isFile()) {
+				File file = resource.getFile();
+				AsynchronousFileChannel channel =
+						AsynchronousFileChannel.open(file.toPath(), StandardOpenOption.READ);
+				return DataBufferUtils.read(channel, dataBufferFactory, this.bufferSize);
+			}
+		}
+		catch (IOException ignore) {
+			// fallback to resource.readableChannel(), below
+		}
+
+		try {
+			ReadableByteChannel channel = resource.readableChannel();
+			return DataBufferUtils.read(channel, dataBufferFactory, this.bufferSize);
+		}
+		catch (IOException ex) {
+			return Flux.error(ex);
+		}
 	}
 
 }

@@ -331,18 +331,13 @@ public class HttpHeadersTests {
 
 	@Test
 	public void contentDisposition() {
-		headers.setContentDispositionFormData("name", null);
-		assertEquals("Invalid Content-Disposition header", "form-data; name=\"name\"",
-				headers.getFirst("Content-Disposition"));
+		ContentDisposition disposition = headers.getContentDisposition();
+		assertNotNull(disposition);
+		assertEquals("Invalid Content-Disposition header", ContentDisposition.empty(), headers.getContentDisposition());
 
-		headers.setContentDispositionFormData("name", "filename");
-		assertEquals("Invalid Content-Disposition header", "form-data; name=\"name\"; filename=\"filename\"",
-				headers.getFirst("Content-Disposition"));
-
-		headers.setContentDispositionFormData("name", "中文.txt", StandardCharsets.UTF_8);
-		assertEquals("Invalid Content-Disposition header",
-				"form-data; name=\"name\"; filename*=UTF-8''%E4%B8%AD%E6%96%87.txt",
-				headers.getFirst("Content-Disposition"));
+		disposition = ContentDisposition.builder("attachment").name("foo").filename("foo.txt").size(123L).build();
+		headers.setContentDisposition(disposition);
+		assertEquals("Invalid Content-Disposition header", disposition, headers.getContentDisposition());
 	}
 
 	@Test  // SPR-11917
@@ -427,18 +422,38 @@ public class HttpHeadersTests {
 		assertEquals(HttpMethod.POST, headers.getAccessControlRequestMethod());
 	}
 
-	@Test  // SPR-14547
-	public void encodeHeaderFieldParam() {
-		String result = HttpHeaders.encodeHeaderFieldParam("test.txt", StandardCharsets.US_ASCII);
-		assertEquals("test.txt", result);
+	@Test
+	public void acceptLanguage() {
+		String headerValue = "fr-ch, fr;q=0.9, en-*;q=0.8, de;q=0.7, *;q=0.5";
+		headers.setAcceptLanguage(Locale.LanguageRange.parse(headerValue));
+		assertEquals(headerValue, headers.getFirst(HttpHeaders.ACCEPT_LANGUAGE));
 
-		result = HttpHeaders.encodeHeaderFieldParam("中文.txt", StandardCharsets.UTF_8);
-		assertEquals("UTF-8''%E4%B8%AD%E6%96%87.txt", result);
+		List<Locale.LanguageRange> expectedRanges = Arrays.asList(
+				new Locale.LanguageRange("fr-ch"),
+				new Locale.LanguageRange("fr", 0.9),
+				new Locale.LanguageRange("en-*", 0.8),
+				new Locale.LanguageRange("de", 0.7),
+				new Locale.LanguageRange("*", 0.5)
+		);
+		assertEquals(expectedRanges, headers.getAcceptLanguage());
+
+		assertEquals(Locale.forLanguageTag("fr-ch"), headers.getAcceptLanguageAsLocale());
+
+		headers.setAcceptLanguageAsLocale(Locale.FRANCE);
+		assertEquals(Locale.FRANCE, headers.getAcceptLanguageAsLocale());
 	}
 
-	@Test(expected = IllegalArgumentException.class)
-	public void encodeHeaderFieldParamInvalidCharset() {
-		HttpHeaders.encodeHeaderFieldParam("test", StandardCharsets.UTF_16);
+	@Test
+	public void contentLanguage() {
+		headers.setContentLanguage(Locale.FRANCE);
+		assertEquals(Locale.FRANCE, headers.getContentLanguage());
+		assertEquals("fr-FR", headers.getFirst(HttpHeaders.CONTENT_LANGUAGE));
+	}
+
+	@Test
+	public void contentLanguageSerialized() {
+		headers.set(HttpHeaders.CONTENT_LANGUAGE,  "de, en_CA");
+		assertEquals("Expected one (first) locale", Locale.GERMAN, headers.getContentLanguage());
 	}
 
 }

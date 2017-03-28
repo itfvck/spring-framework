@@ -16,9 +16,11 @@
 
 package org.springframework.web.server.adapter;
 
+import java.security.Principal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,12 +28,19 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import reactor.core.publisher.Mono;
 
+import org.springframework.core.ResolvableType;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.FormHttpMessageReader;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebSession;
@@ -47,6 +56,15 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 
 	private static final List<HttpMethod> SAFE_METHODS = Arrays.asList(HttpMethod.GET, HttpMethod.HEAD);
 
+	private static final FormHttpMessageReader FORM_READER = new FormHttpMessageReader();
+
+	private static final ResolvableType FORM_DATA_VALUE_TYPE =
+			ResolvableType.forClassWithGenerics(MultiValueMap.class, String.class, String.class);
+
+	private static final Mono<MultiValueMap<String, String>> EMPTY_FORM_DATA =
+			Mono.just(CollectionUtils.unmodifiableMultiValueMap(new LinkedMultiValueMap<String, String>(0)))
+					.cache();
+
 
 	private final ServerHttpRequest request;
 
@@ -56,18 +74,60 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 
 	private final Mono<WebSession> sessionMono;
 
+	private final Mono<MultiValueMap<String, String>> formDataMono;
+
+	private final Mono<MultiValueMap<String, String>> requestParamsMono;
+
 	private volatile boolean notModified;
 
 
+	/**
+	 * Alternate constructor with a WebSessionManager parameter.
+	 */
 	public DefaultServerWebExchange(ServerHttpRequest request, ServerHttpResponse response,
 			WebSessionManager sessionManager) {
 
 		Assert.notNull(request, "'request' is required");
 		Assert.notNull(response, "'response' is required");
 		Assert.notNull(response, "'sessionManager' is required");
+		Assert.notNull(response, "'formReader' is required");
+
 		this.request = request;
 		this.response = response;
 		this.sessionMono = sessionManager.getSession(this).cache();
+		this.formDataMono = initFormData(request);
+		this.requestParamsMono = initRequestParams(request, this.formDataMono);
+	}
+
+	private static Mono<MultiValueMap<String, String>> initFormData(ServerHttpRequest request) {
+		MediaType contentType;
+		try {
+			contentType = request.getHeaders().getContentType();
+			if (MediaType.APPLICATION_FORM_URLENCODED.isCompatibleWith(contentType)) {
+				return FORM_READER
+						.readMono(FORM_DATA_VALUE_TYPE, request, Collections.emptyMap())
+						.otherwiseIfEmpty(EMPTY_FORM_DATA)
+						.cache();
+			}
+		}
+		catch (InvalidMediaTypeException ex) {
+			// Ignore
+		}
+		return EMPTY_FORM_DATA;
+	}
+
+	private static Mono<MultiValueMap<String, String>> initRequestParams(
+			ServerHttpRequest request, Mono<MultiValueMap<String, String>> formDataMono) {
+
+		return formDataMono
+				.map(formData -> {
+					MultiValueMap<String, String> result = new LinkedMultiValueMap<>();
+					result.putAll(request.getQueryParams());
+					result.putAll(formData);
+					return CollectionUtils.unmodifiableMultiValueMap(result);
+				})
+				.defaultIfEmpty(request.getQueryParams())
+				.cache();
 	}
 
 
@@ -102,6 +162,21 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 	@Override
 	public Mono<WebSession> getSession() {
 		return this.sessionMono;
+	}
+
+	@Override
+	public <T extends Principal> Mono<T> getPrincipal() {
+		return Mono.empty();
+	}
+
+	@Override
+	public Mono<MultiValueMap<String, String>> getFormData() {
+		return this.formDataMono;
+	}
+
+	@Override
+	public Mono<MultiValueMap<String, String>> getRequestParams() {
+		return this.requestParamsMono;
 	}
 
 	@Override

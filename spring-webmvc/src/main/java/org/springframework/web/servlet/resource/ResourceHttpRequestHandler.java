@@ -23,7 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.ServletException;
-import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -31,7 +30,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
@@ -43,7 +41,6 @@ import org.springframework.http.converter.ResourceRegionHttpMessageConverter;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.http.server.ServletServerHttpResponse;
 import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.ResourceUtils;
@@ -91,11 +88,7 @@ import org.springframework.web.servlet.support.WebContentGenerator;
  * @since 3.0.4
  */
 public class ResourceHttpRequestHandler extends WebContentGenerator
-		implements HttpRequestHandler, InitializingBean, SmartInitializingSingleton, CorsConfigurationSource {
-
-	// Servlet 3.1 setContentLengthLong(long) available?
-	private static final boolean contentLengthLongAvailable =
-			ClassUtils.hasMethod(ServletResponse.class, "setContentLengthLong", long.class);
+		implements HttpRequestHandler, InitializingBean, CorsConfigurationSource {
 
 	private static final Log logger = LogFactory.getLog(ResourceHttpRequestHandler.class);
 
@@ -112,7 +105,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 	private ContentNegotiationManager contentNegotiationManager;
 
-	private PathExtensionContentNegotiationStrategy pathExtensionStrategy;
+	private PathExtensionContentNegotiationStrategy contentNegotiationStrategy;
 
 	private CorsConfiguration corsConfiguration;
 
@@ -187,7 +180,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	}
 
 	/**
-	 * Return the list of configured resource converters.
+	 * Return the configured resource converter.
 	 * @since 4.3
 	 */
 	public ResourceHttpMessageConverter getResourceHttpMessageConverter() {
@@ -204,7 +197,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	}
 
 	/**
-	 * Return the list of configured resource region converters.
+	 * Return the configured resource region converter.
 	 * @since 4.3
 	 */
 	public ResourceRegionHttpMessageConverter getResourceRegionHttpMessageConverter() {
@@ -253,16 +246,20 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 			logger.warn("Locations list is empty. No resources will be served unless a " +
 					"custom ResourceResolver is configured as an alternative to PathResourceResolver.");
 		}
+
 		if (this.resourceResolvers.isEmpty()) {
 			this.resourceResolvers.add(new PathResourceResolver());
 		}
 		initAllowedLocations();
+
 		if (this.resourceHttpMessageConverter == null) {
 			this.resourceHttpMessageConverter = new ResourceHttpMessageConverter();
 		}
 		if (this.resourceRegionHttpMessageConverter == null) {
 			this.resourceRegionHttpMessageConverter = new ResourceRegionHttpMessageConverter();
 		}
+
+		this.contentNegotiationStrategy = initContentNegotiationStrategy();
 	}
 
 	/**
@@ -285,11 +282,12 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 		}
 	}
 
-	@Override
-	public void afterSingletonsInstantiated() {
-		this.pathExtensionStrategy = initContentNegotiationStrategy();
-	}
-
+	/**
+	 * Initialize the content negotiation strategy depending on the {@code ContentNegotiationManager}
+	 * setup and the availability of a {@code ServletContext}.
+	 * @see ServletPathExtensionContentNegotiationStrategy
+	 * @see PathExtensionContentNegotiationStrategy
+	 */
 	protected PathExtensionContentNegotiationStrategy initContentNegotiationStrategy() {
 		Map<String, MediaType> mediaTypes = null;
 		if (getContentNegotiationManager() != null) {
@@ -299,9 +297,9 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 				mediaTypes = new HashMap<>(strategy.getMediaTypes());
 			}
 		}
-		return (getServletContext() != null) ?
-			new ServletPathExtensionContentNegotiationStrategy(getServletContext(), mediaTypes) :
-			new PathExtensionContentNegotiationStrategy(mediaTypes);
+		return (getServletContext() != null ?
+				new ServletPathExtensionContentNegotiationStrategy(getServletContext(), mediaTypes) :
+				new PathExtensionContentNegotiationStrategy(mediaTypes));
 	}
 
 
@@ -514,7 +512,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	 * @return the corresponding media type, or {@code null} if none found
 	 */
 	protected MediaType getMediaType(HttpServletRequest request, Resource resource) {
-		return this.pathExtensionStrategy.getMediaTypeForResource(resource);
+		return this.contentNegotiationStrategy.getMediaTypeForResource(resource);
 	}
 
 	/**
@@ -528,12 +526,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	protected void setHeaders(HttpServletResponse response, Resource resource, MediaType mediaType) throws IOException {
 		long length = resource.contentLength();
 		if (length > Integer.MAX_VALUE) {
-			if (contentLengthLongAvailable) {
-				response.setContentLengthLong(length);
-			}
-			else {
-				response.setHeader(HttpHeaders.CONTENT_LENGTH, Long.toString(length));
-			}
+			response.setContentLengthLong(length);
 		}
 		else {
 			response.setContentLength((int) length);
@@ -542,11 +535,10 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 		if (mediaType != null) {
 			response.setContentType(mediaType.toString());
 		}
-		if (resource instanceof EncodedResource) {
-			response.setHeader(HttpHeaders.CONTENT_ENCODING, ((EncodedResource) resource).getContentEncoding());
-		}
-		if (resource instanceof VersionedResource) {
-			response.setHeader(HttpHeaders.ETAG, "\"" + ((VersionedResource) resource).getVersion() + "\"");
+		if (resource instanceof HttpResource) {
+			HttpHeaders resourceHeaders = ((HttpResource) resource).getResponseHeaders();
+			resourceHeaders.toSingleValueMap().entrySet()
+					.stream().forEach(entry -> response.setHeader(entry.getKey(), entry.getValue()));
 		}
 		response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,11 @@
 package org.springframework.web.cors;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.http.HttpMethod;
 import org.springframework.util.CollectionUtils;
@@ -26,8 +29,16 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 /**
- * A container for CORS configuration that also provides methods to check
- * the actual or requested origin, HTTP methods, and headers.
+ * A container for CORS configuration along with methods to check against the
+ * actual origin, HTTP methods, and headers of a given request.
+ *
+ * <p>By default a newly created {@code CorsConfiguration} does not permit any
+ * cross-origin requests and must be configured explicitly to indicate what
+ * should be allowed.
+ *
+ * <p>Use {@link #applyPermitDefaultValues()} to flip the initialization model
+ * to start with open defaults that permit all cross-origin requests for GET,
+ * HEAD, and POST requests.
  *
  * @author Sebastien Deleuze
  * @author Rossen Stoyanchev
@@ -69,7 +80,9 @@ public class CorsConfiguration {
 
 
 	/**
-	 * Construct a new, empty {@code CorsConfiguration} instance.
+	 * Construct a new {@code CorsConfiguration} instance with no cross-origin
+	 * requests allowed for any origin by default.
+	 * @see #applyPermitDefaultValues()
 	 */
 	public CorsConfiguration() {
 	}
@@ -90,46 +103,6 @@ public class CorsConfiguration {
 
 
 	/**
-	 * Combine the supplied {@code CorsConfiguration} with this one.
-	 * <p>Properties of this configuration are overridden by any non-null
-	 * properties of the supplied one.
-	 * @return the combined {@code CorsConfiguration} or {@code this}
-	 * configuration if the supplied configuration is {@code null}
-	 */
-	public CorsConfiguration combine(CorsConfiguration other) {
-		if (other == null) {
-			return this;
-		}
-		CorsConfiguration config = new CorsConfiguration(this);
-		config.setAllowedOrigins(combine(getAllowedOrigins(), other.getAllowedOrigins()));
-		config.setAllowedMethods(combine(getAllowedMethods(), other.getAllowedMethods()));
-		config.setAllowedHeaders(combine(getAllowedHeaders(), other.getAllowedHeaders()));
-		config.setExposedHeaders(combine(getExposedHeaders(), other.getExposedHeaders()));
-		Boolean allowCredentials = other.getAllowCredentials();
-		if (allowCredentials != null) {
-			config.setAllowCredentials(allowCredentials);
-		}
-		Long maxAge = other.getMaxAge();
-		if (maxAge != null) {
-			config.setMaxAge(maxAge);
-		}
-		return config;
-	}
-
-	private List<String> combine(List<String> source, List<String> other) {
-		if (other == null || other.contains(ALL)) {
-			return source;
-		}
-		if (source == null || source.contains(ALL)) {
-			return other;
-		}
-		List<String> combined = new ArrayList<>(source);
-		combined.addAll(other);
-		return combined;
-	}
-
-
-	/**
 	 * Set the origins to allow, e.g. {@code "http://domain1.com"}.
 	 * <p>The special value {@code "*"} allows all domains.
 	 * <p>By default this is not set.
@@ -139,7 +112,7 @@ public class CorsConfiguration {
 	}
 
 	/**
-	 * Return the configured origins to allow, possibly {@code null}.
+	 * Return the configured origins to allow, or {@code null} if none.
 	 * @see #addAllowedOrigin(String)
 	 * @see #setAllowedOrigins(List)
 	 */
@@ -182,7 +155,7 @@ public class CorsConfiguration {
 	}
 
 	/**
-	 * Return the allowed HTTP methods, possibly {@code null} in which case
+	 * Return the allowed HTTP methods, or {@code null} in which case
 	 * only {@code "GET"} and {@code "HEAD"} allowed.
 	 * @see #addAllowedMethod(HttpMethod)
 	 * @see #addAllowedMethod(String)
@@ -235,7 +208,7 @@ public class CorsConfiguration {
 	}
 
 	/**
-	 * Return the allowed actual request headers, possibly {@code null}.
+	 * Return the allowed actual request headers, or {@code null} if none.
 	 * @see #addAllowedHeader(String)
 	 * @see #setAllowedHeaders(List)
 	 */
@@ -269,7 +242,7 @@ public class CorsConfiguration {
 	}
 
 	/**
-	 * Return the configured response headers to expose, possibly {@code null}.
+	 * Return the configured response headers to expose, or {@code null} if none.
 	 * @see #addExposedHeader(String)
 	 * @see #setExposedHeaders(List)
 	 */
@@ -300,7 +273,7 @@ public class CorsConfiguration {
 	}
 
 	/**
-	 * Return the configured {@code allowCredentials} flag, possibly {@code null}.
+	 * Return the configured {@code allowCredentials} flag, or {@code null} if none.
 	 * @see #setAllowCredentials(Boolean)
 	 */
 	public Boolean getAllowCredentials() {
@@ -317,18 +290,95 @@ public class CorsConfiguration {
 	}
 
 	/**
-	 * Return the configured {@code maxAge} value, possibly {@code null}.
+	 * Return the configured {@code maxAge} value, or {@code null} if none.
 	 * @see #setMaxAge(Long)
 	 */
 	public Long getMaxAge() {
 		return this.maxAge;
 	}
 
+	/**
+	 * By default a newly created {@code CorsConfiguration} does not permit any
+	 * cross-origin requests and must be configured explicitly to indicate what
+	 * should be allowed.
+	 *
+	 * <p>Use this method to flip the initialization model to start with open
+	 * defaults that permit all cross-origin requests for GET, HEAD, and POST
+	 * requests. Note however that this method will not override any existing
+	 * values already set.
+	 *
+	 * <p>The following defaults are applied if not already set:
+	 * <ul>
+	 *     <li>Allow all origins, i.e. {@code "*"}.</li>
+	 *     <li>Allow "simple" methods {@code GET}, {@code HEAD} and {@code POST}.</li>
+	 *     <li>Allow all headers.</li>
+	 *     <li>Allow credentials.</li>
+	 *     <li>Set max age to 1800 seconds (30 minutes).</li>
+	 * </ul>
+	 */
+	public CorsConfiguration applyPermitDefaultValues() {
+		if (this.allowedOrigins == null) {
+			this.addAllowedOrigin(ALL);
+		}
+		if (this.allowedMethods == null) {
+			this.setAllowedMethods(Arrays.asList(
+					HttpMethod.GET.name(), HttpMethod.HEAD.name(), HttpMethod.POST.name()));
+		}
+		if (this.allowedHeaders == null) {
+			this.addAllowedHeader(ALL);
+		}
+		if (this.allowCredentials == null) {
+			this.setAllowCredentials(true);
+		}
+		if (this.maxAge == null) {
+			this.setMaxAge(1800L);
+		}
+		return this;
+	}
+
+	/**
+	 * Combine the supplied {@code CorsConfiguration} with this one.
+	 * <p>Properties of this configuration are overridden by any non-null
+	 * properties of the supplied one.
+	 * @return the combined {@code CorsConfiguration} or {@code this}
+	 * configuration if the supplied configuration is {@code null}
+	 */
+	public CorsConfiguration combine(CorsConfiguration other) {
+		if (other == null) {
+			return this;
+		}
+		CorsConfiguration config = new CorsConfiguration(this);
+		config.setAllowedOrigins(combine(getAllowedOrigins(), other.getAllowedOrigins()));
+		config.setAllowedMethods(combine(getAllowedMethods(), other.getAllowedMethods()));
+		config.setAllowedHeaders(combine(getAllowedHeaders(), other.getAllowedHeaders()));
+		config.setExposedHeaders(combine(getExposedHeaders(), other.getExposedHeaders()));
+		Boolean allowCredentials = other.getAllowCredentials();
+		if (allowCredentials != null) {
+			config.setAllowCredentials(allowCredentials);
+		}
+		Long maxAge = other.getMaxAge();
+		if (maxAge != null) {
+			config.setMaxAge(maxAge);
+		}
+		return config;
+	}
+
+	private List<String> combine(List<String> source, List<String> other) {
+		if (other == null || other.contains(ALL)) {
+			return source;
+		}
+		if (source == null || source.contains(ALL)) {
+			return other;
+		}
+		Set<String> combined = new LinkedHashSet<>(source);
+		combined.addAll(other);
+		return new ArrayList<>(combined);
+	}
 
 	/**
 	 * Check the origin of the request against the configured allowed origins.
 	 * @param requestOrigin the origin to check
-	 * @return the origin to use for the response, possibly {@code null} which
+	 * @return the origin to use for the response, or {@code null} which
 	 * means the request origin is not allowed
 	 */
 	public String checkOrigin(String requestOrigin) {

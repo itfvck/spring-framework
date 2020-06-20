@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,36 +16,28 @@
 
 package org.springframework.web.reactive.result.view;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 import org.springframework.core.codec.CharSequenceEncoder;
-import org.springframework.core.io.buffer.support.DataBufferTestUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.http.codec.xml.Jaxb2XmlEncoder;
-import org.springframework.mock.http.server.reactive.test.MockServerHttpRequest;
-import org.springframework.mock.http.server.reactive.test.MockServerWebExchange;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.ui.ModelMap;
-import org.springframework.util.MimeType;
+import org.springframework.web.testfixture.http.server.reactive.MockServerHttpRequest;
+import org.springframework.web.testfixture.server.MockServerWebExchange;
 
-import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
-
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
  * Unit tests for {@link HttpMessageWriterView}.
@@ -55,84 +47,65 @@ public class HttpMessageWriterViewTests {
 
 	private HttpMessageWriterView view = new HttpMessageWriterView(new Jackson2JsonEncoder());
 
-	private ModelMap model = new ExtendedModelMap();
+	private final ModelMap model = new ExtendedModelMap();
+
+	private final MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/"));
 
 
 	@Test
 	public void supportedMediaTypes() throws Exception {
-		List<MimeType> mimeTypes = Arrays.asList(
-				new MimeType("application", "json", StandardCharsets.UTF_8),
-				new MimeType("application", "*+json", StandardCharsets.UTF_8));
-
-		assertEquals(mimeTypes, this.view.getSupportedMediaTypes());
+		assertThat(this.view.getSupportedMediaTypes()).isEqualTo(Arrays.asList(
+				MediaType.APPLICATION_JSON,
+				MediaType.parseMediaType("application/*+json")));
 	}
 
 	@Test
-	public void extractObject() throws Exception {
+	public void singleMatch() throws Exception {
+		this.view.setModelKeys(Collections.singleton("foo2"));
+		this.model.addAttribute("foo1", Collections.singleton("bar1"));
+		this.model.addAttribute("foo2", Collections.singleton("bar2"));
+		this.model.addAttribute("foo3", Collections.singleton("bar3"));
+
+		assertThat(doRender()).isEqualTo("[\"bar2\"]");
+	}
+
+	@Test
+	public void noMatch() throws Exception {
 		this.view.setModelKeys(Collections.singleton("foo2"));
 		this.model.addAttribute("foo1", "bar1");
-		this.model.addAttribute("foo2", "bar2");
-		this.model.addAttribute("foo3", "bar3");
 
-		assertEquals("bar2", this.view.extractObjectToRender(this.model));
+		assertThat(doRender()).isEqualTo("");
 	}
 
 	@Test
-	public void extractObjectNoMatch() throws Exception {
-		this.view.setModelKeys(Collections.singleton("foo2"));
+	public void noMatchBecauseNotSupported() throws Exception {
+		this.view = new HttpMessageWriterView(new Jaxb2XmlEncoder());
+		this.view.setModelKeys(new HashSet<>(Collections.singletonList("foo1")));
 		this.model.addAttribute("foo1", "bar1");
 
-		assertNull(this.view.extractObjectToRender(this.model));
+		assertThat(doRender()).isEqualTo("");
 	}
 
 	@Test
-	public void extractObjectMultipleMatches() throws Exception {
+	public void multipleMatches() throws Exception {
+		this.view.setModelKeys(new HashSet<>(Arrays.asList("foo1", "foo2")));
+		this.model.addAttribute("foo1", Collections.singleton("bar1"));
+		this.model.addAttribute("foo2", Collections.singleton("bar2"));
+		this.model.addAttribute("foo3", Collections.singleton("bar3"));
+
+		assertThat(doRender()).isEqualTo("{\"foo1\":[\"bar1\"],\"foo2\":[\"bar2\"]}");
+	}
+
+	@Test
+	public void multipleMatchesNotSupported() throws Exception {
+		this.view = new HttpMessageWriterView(CharSequenceEncoder.allMimeTypes());
 		this.view.setModelKeys(new HashSet<>(Arrays.asList("foo1", "foo2")));
 		this.model.addAttribute("foo1", "bar1");
 		this.model.addAttribute("foo2", "bar2");
-		this.model.addAttribute("foo3", "bar3");
 
-		Object value = this.view.extractObjectToRender(this.model);
-		assertNotNull(value);
-		assertEquals(HashMap.class, value.getClass());
-
-		Map<?, ?> map = (Map<?, ?>) value;
-		assertEquals(2, map.size());
-		assertEquals("bar1", map.get("foo1"));
-		assertEquals("bar2", map.get("foo2"));
-	}
-
-	@Test
-	public void extractObjectMultipleMatchesNotSupported() throws Exception {
-		HttpMessageWriterView view = new HttpMessageWriterView(CharSequenceEncoder.allMimeTypes());
-		view.setModelKeys(new HashSet<>(Arrays.asList("foo1", "foo2")));
-		this.model.addAttribute("foo1", "bar1");
-		this.model.addAttribute("foo2", "bar2");
-
-		try {
-			view.extractObjectToRender(this.model);
-			fail();
-		}
-		catch (IllegalStateException ex) {
-			String message = ex.getMessage();
-			assertTrue(message, message.contains("Map rendering is not supported"));
-		}
-	}
-
-	@Test
-	public void extractObjectNotSupported() throws Exception {
-		HttpMessageWriterView view = new HttpMessageWriterView(new Jaxb2XmlEncoder());
-		view.setModelKeys(new HashSet<>(Collections.singletonList("foo1")));
-		this.model.addAttribute("foo1", "bar1");
-
-		try {
-			view.extractObjectToRender(this.model);
-			fail();
-		}
-		catch (IllegalStateException ex) {
-			String message = ex.getMessage();
-			assertTrue(message, message.contains("[foo1] is not supported"));
-		}
+		assertThatIllegalStateException().isThrownBy(
+				this::doRender)
+			.withMessageContaining("Map rendering is not supported");
 	}
 
 	@Test
@@ -143,17 +116,19 @@ public class HttpMessageWriterViewTests {
 		this.model.addAttribute("pojoData", pojoData);
 		this.view.setModelKeys(Collections.singleton("pojoData"));
 
-		MockServerWebExchange exchange = MockServerHttpRequest.get("/path").toExchange();
+		this.view.render(this.model, MediaType.APPLICATION_JSON, exchange).block(Duration.ZERO);
 
-		this.view.render(this.model, MediaType.APPLICATION_JSON, exchange).block(Duration.ofSeconds(5));
-
-		StepVerifier.create(exchange.getResponse().getBody())
-				.consumeNextWith( buf -> assertEquals("{\"foo\":\"f\",\"bar\":\"b\"}",
-						DataBufferTestUtils.dumpString(buf, StandardCharsets.UTF_8))
-				)
+		StepVerifier.create(this.exchange.getResponse().getBody())
+				.consumeNextWith(buf -> assertThat(buf.toString(UTF_8)).isEqualTo("{\"foo\":\"f\",\"bar\":\"b\"}"))
 				.expectComplete()
 				.verify();
 	}
+
+	private String doRender() {
+		this.view.render(this.model, MediaType.APPLICATION_JSON, this.exchange).block(Duration.ZERO);
+		return this.exchange.getResponse().getBodyAsString().block(Duration.ZERO);
+	}
+
 
 
 	@SuppressWarnings("unused")

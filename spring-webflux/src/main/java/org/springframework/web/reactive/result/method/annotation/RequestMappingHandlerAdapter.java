@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,7 @@
 
 package org.springframework.web.reactive.result.method.annotation;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 
@@ -25,33 +25,28 @@ import org.apache.commons.logging.LogFactory;
 import reactor.core.publisher.Mono;
 
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.ReactiveAdapterRegistry;
-import org.springframework.core.codec.ByteArrayDecoder;
-import org.springframework.core.codec.ByteBufferDecoder;
-import org.springframework.core.codec.DataBufferDecoder;
-import org.springframework.core.codec.ResourceDecoder;
-import org.springframework.core.codec.StringDecoder;
-import org.springframework.http.codec.DecoderHttpMessageReader;
 import org.springframework.http.codec.HttpMessageReader;
 import org.springframework.http.codec.ServerCodecConfigurer;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.support.WebBindingInitializer;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.reactive.BindingContext;
 import org.springframework.web.reactive.HandlerAdapter;
+import org.springframework.web.reactive.HandlerMapping;
 import org.springframework.web.reactive.HandlerResult;
-import org.springframework.web.reactive.result.method.HandlerMethodArgumentResolver;
 import org.springframework.web.reactive.result.method.InvocableHandlerMethod;
-import org.springframework.web.reactive.result.method.SyncHandlerMethodArgumentResolver;
-import org.springframework.web.reactive.result.method.SyncInvocableHandlerMethod;
 import org.springframework.web.server.ServerWebExchange;
 
 /**
- * Supports the invocation of {@code @RequestMapping} methods.
+ * Supports the invocation of
+ * {@link org.springframework.web.bind.annotation.RequestMapping @RequestMapping}
+ * handler methods.
  *
  * @author Rossen Stoyanchev
  * @since 5.0
@@ -61,51 +56,38 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter, Application
 	private static final Log logger = LogFactory.getLog(RequestMappingHandlerAdapter.class);
 
 
-	private final List<HttpMessageReader<?>> messageReaders = new ArrayList<>(10);
+	private List<HttpMessageReader<?>> messageReaders = Collections.emptyList();
 
+	@Nullable
 	private WebBindingInitializer webBindingInitializer;
 
-	private ReactiveAdapterRegistry reactiveAdapterRegistry = new ReactiveAdapterRegistry();
+	@Nullable
+	private ArgumentResolverConfigurer argumentResolverConfigurer;
 
-	private List<HandlerMethodArgumentResolver> customArgumentResolvers;
+	@Nullable
+	private ReactiveAdapterRegistry reactiveAdapterRegistry;
 
-	private List<HandlerMethodArgumentResolver> argumentResolvers;
-
-	private List<SyncHandlerMethodArgumentResolver> customInitBinderArgumentResolvers;
-
-	private List<SyncHandlerMethodArgumentResolver> initBinderArgumentResolvers;
-
+	@Nullable
 	private ConfigurableApplicationContext applicationContext;
 
-	private ControllerMethodResolver controllerMethodResolver;
+	@Nullable
+	private ControllerMethodResolver methodResolver;
 
+	@Nullable
 	private ModelInitializer modelInitializer;
-
-
-
-	public RequestMappingHandlerAdapter() {
-		this.messageReaders.add(new DecoderHttpMessageReader<>(new ByteArrayDecoder()));
-		this.messageReaders.add(new DecoderHttpMessageReader<>(new ByteBufferDecoder()));
-		this.messageReaders.add(new DecoderHttpMessageReader<>(new DataBufferDecoder()));
-		this.messageReaders.add(new DecoderHttpMessageReader<>(new ResourceDecoder()));
-		this.messageReaders.add(new DecoderHttpMessageReader<>(StringDecoder.allMimeTypes(true)));
-	}
 
 
 	/**
 	 * Configure HTTP message readers to de-serialize the request body with.
-	 * <p>By default only basic data types such as bytes and text are registered.
-	 * Consider using {@link ServerCodecConfigurer} to configure a richer list
-	 * including JSON encoding .
-	 * @see ServerCodecConfigurer
+	 * <p>By default this is set to {@link ServerCodecConfigurer}'s readers with defaults.
 	 */
 	public void setMessageReaders(List<HttpMessageReader<?>> messageReaders) {
-		this.messageReaders.clear();
-		this.messageReaders.addAll(messageReaders);
+		Assert.notNull(messageReaders, "'messageReaders' must not be null");
+		this.messageReaders = messageReaders;
 	}
 
 	/**
-	 * Return the configured HTTP message readers.
+	 * Return the configurer for HTTP message readers.
 	 */
 	public List<HttpMessageReader<?>> getMessageReaders() {
 		return this.messageReaders;
@@ -115,15 +97,31 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter, Application
 	 * Provide a WebBindingInitializer with "global" initialization to apply
 	 * to every DataBinder instance.
 	 */
-	public void setWebBindingInitializer(WebBindingInitializer webBindingInitializer) {
+	public void setWebBindingInitializer(@Nullable WebBindingInitializer webBindingInitializer) {
 		this.webBindingInitializer = webBindingInitializer;
 	}
 
 	/**
 	 * Return the configured WebBindingInitializer, or {@code null} if none.
 	 */
+	@Nullable
 	public WebBindingInitializer getWebBindingInitializer() {
 		return this.webBindingInitializer;
+	}
+
+	/**
+	 * Configure resolvers for controller method arguments.
+	 */
+	public void setArgumentResolverConfigurer(@Nullable ArgumentResolverConfigurer configurer) {
+		this.argumentResolverConfigurer = configurer;
+	}
+
+	/**
+	 * Return the configured resolvers for controller method arguments.
+	 */
+	@Nullable
+	public ArgumentResolverConfigurer getArgumentResolverConfigurer() {
+		return this.argumentResolverConfigurer;
 	}
 
 	/**
@@ -131,76 +129,16 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter, Application
 	 * <p>By default this is an instance of {@link ReactiveAdapterRegistry} with
 	 * default settings.
 	 */
-	public void setReactiveAdapterRegistry(ReactiveAdapterRegistry registry) {
+	public void setReactiveAdapterRegistry(@Nullable ReactiveAdapterRegistry registry) {
 		this.reactiveAdapterRegistry = registry;
 	}
 
 	/**
 	 * Return the configured registry for adapting reactive types.
 	 */
+	@Nullable
 	public ReactiveAdapterRegistry getReactiveAdapterRegistry() {
 		return this.reactiveAdapterRegistry;
-	}
-
-	/**
-	 * Configure custom argument resolvers without overriding the built-in ones.
-	 */
-	public void setCustomArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
-		this.customArgumentResolvers = resolvers;
-	}
-
-	/**
-	 * Return the custom argument resolvers.
-	 */
-	public List<HandlerMethodArgumentResolver> getCustomArgumentResolvers() {
-		return this.customArgumentResolvers;
-	}
-
-	/**
-	 * Configure the complete list of supported argument types thus overriding
-	 * the resolvers that would otherwise be configured by default.
-	 */
-	public void setArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
-		this.argumentResolvers = new ArrayList<>(resolvers);
-	}
-
-	/**
-	 * Return the configured argument resolvers.
-	 */
-	public List<HandlerMethodArgumentResolver> getArgumentResolvers() {
-		return this.argumentResolvers;
-	}
-
-	/**
-	 * Configure custom argument resolvers for {@code @InitBinder} methods.
-	 */
-	public void setCustomInitBinderArgumentResolvers(List<SyncHandlerMethodArgumentResolver> resolvers) {
-		this.customInitBinderArgumentResolvers = resolvers;
-	}
-
-	/**
-	 * Return the custom {@code @InitBinder} argument resolvers.
-	 */
-	public List<SyncHandlerMethodArgumentResolver> getCustomInitBinderArgumentResolvers() {
-		return this.customInitBinderArgumentResolvers;
-	}
-
-	/**
-	 * Configure the supported argument types in {@code @InitBinder} methods.
-	 */
-	public void setInitBinderArgumentResolvers(List<SyncHandlerMethodArgumentResolver> resolvers) {
-		this.initBinderArgumentResolvers = null;
-		if (resolvers != null) {
-			this.initBinderArgumentResolvers = new ArrayList<>();
-			this.initBinderArgumentResolvers.addAll(resolvers);
-		}
-	}
-
-	/**
-	 * Return the configured argument resolvers for {@code @InitBinder} methods.
-	 */
-	public List<SyncHandlerMethodArgumentResolver> getInitBinderArgumentResolvers() {
-		return this.initBinderArgumentResolvers;
 	}
 
 	/**
@@ -215,155 +153,86 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter, Application
 		}
 	}
 
-	public ConfigurableApplicationContext getApplicationContext() {
-		return this.applicationContext;
-	}
-
-	public ConfigurableBeanFactory getBeanFactory() {
-		return this.applicationContext.getBeanFactory();
-	}
-
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
+		Assert.notNull(this.applicationContext, "ApplicationContext is required");
 
-		if (this.argumentResolvers == null) {
-			this.argumentResolvers = getDefaultArgumentResolvers();
+		if (CollectionUtils.isEmpty(this.messageReaders)) {
+			ServerCodecConfigurer codecConfigurer = ServerCodecConfigurer.create();
+			this.messageReaders = codecConfigurer.getReaders();
 		}
-		if (this.initBinderArgumentResolvers == null) {
-			this.initBinderArgumentResolvers = getDefaultInitBinderArgumentResolvers();
+		if (this.argumentResolverConfigurer == null) {
+			this.argumentResolverConfigurer = new ArgumentResolverConfigurer();
 		}
-
-		this.controllerMethodResolver = new ControllerMethodResolver(
-				getArgumentResolvers(), getInitBinderArgumentResolvers(), getApplicationContext());
-
-		this.modelInitializer = new ModelInitializer(getReactiveAdapterRegistry());
-	}
-
-	protected List<HandlerMethodArgumentResolver> getDefaultArgumentResolvers() {
-		List<HandlerMethodArgumentResolver> resolvers = new ArrayList<>();
-
-		// Annotation-based argument resolution
-		resolvers.add(new RequestParamMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry(), false));
-		resolvers.add(new RequestParamMapMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new PathVariableMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new PathVariableMapMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new RequestBodyArgumentResolver(getMessageReaders(), getReactiveAdapterRegistry()));
-		resolvers.add(new ModelAttributeMethodArgumentResolver(getReactiveAdapterRegistry(), false));
-		resolvers.add(new RequestHeaderMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new RequestHeaderMapMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new CookieValueMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new ExpressionValueMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new SessionAttributeMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new RequestAttributeMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-
-		// Type-based argument resolution
-		resolvers.add(new HttpEntityArgumentResolver(getMessageReaders(), getReactiveAdapterRegistry()));
-		resolvers.add(new ModelArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new ErrorsMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new ServerWebExchangeArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new PrincipalArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new WebSessionArgumentResolver(getReactiveAdapterRegistry()));
-
-		// Custom resolvers
-		if (getCustomArgumentResolvers() != null) {
-			resolvers.addAll(getCustomArgumentResolvers());
+		if (this.reactiveAdapterRegistry == null) {
+			this.reactiveAdapterRegistry = ReactiveAdapterRegistry.getSharedInstance();
 		}
 
-		// Catch-all
-		resolvers.add(new RequestParamMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry(), true));
-		resolvers.add(new ModelAttributeMethodArgumentResolver(getReactiveAdapterRegistry(), true));
-		return resolvers;
-	}
+		this.methodResolver = new ControllerMethodResolver(this.argumentResolverConfigurer,
+				this.reactiveAdapterRegistry, this.applicationContext, this.messageReaders);
 
-	protected List<SyncHandlerMethodArgumentResolver> getDefaultInitBinderArgumentResolvers() {
-		List<SyncHandlerMethodArgumentResolver> resolvers = new ArrayList<>();
-
-		// Annotation-based argument resolution
-		resolvers.add(new RequestParamMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry(), false));
-		resolvers.add(new RequestParamMapMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new PathVariableMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new PathVariableMapMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new RequestHeaderMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new RequestHeaderMapMethodArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new CookieValueMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new ExpressionValueMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-		resolvers.add(new RequestAttributeMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry()));
-
-		// Type-based argument resolution
-		resolvers.add(new ModelArgumentResolver(getReactiveAdapterRegistry()));
-		resolvers.add(new ServerWebExchangeArgumentResolver(getReactiveAdapterRegistry()));
-
-		// Custom resolvers
-		if (getCustomInitBinderArgumentResolvers() != null) {
-			resolvers.addAll(getCustomInitBinderArgumentResolvers());
-		}
-
-		// Catch-all
-		resolvers.add(new RequestParamMethodArgumentResolver(getBeanFactory(), getReactiveAdapterRegistry(), true));
-		return resolvers;
+		this.modelInitializer = new ModelInitializer(this.methodResolver, this.reactiveAdapterRegistry);
 	}
 
 
 	@Override
 	public boolean supports(Object handler) {
-		return HandlerMethod.class.equals(handler.getClass());
+		return handler instanceof HandlerMethod;
 	}
 
 	@Override
 	public Mono<HandlerResult> handle(ServerWebExchange exchange, Object handler) {
-
-		Assert.notNull(handler, "Expected handler");
 		HandlerMethod handlerMethod = (HandlerMethod) handler;
+		Assert.state(this.methodResolver != null && this.modelInitializer != null, "Not initialized");
 
-		BindingContext bindingContext = new InitBinderBindingContext(
-				getWebBindingInitializer(), getInitBinderMethods(handlerMethod));
+		InitBinderBindingContext bindingContext = new InitBinderBindingContext(
+				getWebBindingInitializer(), this.methodResolver.getInitBinderMethods(handlerMethod));
+
+		InvocableHandlerMethod invocableMethod = this.methodResolver.getRequestMappingMethod(handlerMethod);
+
+		Function<Throwable, Mono<HandlerResult>> exceptionHandler =
+				ex -> handleException(ex, handlerMethod, bindingContext, exchange);
 
 		return this.modelInitializer
-				.initModel(bindingContext, getModelAttributeMethods(handlerMethod), exchange)
-				.then(() -> {
-					Function<Throwable, Mono<HandlerResult>> exceptionHandler =
-							ex -> handleException(exchange, handlerMethod, bindingContext, ex);
-
-					InvocableHandlerMethod invocable = new InvocableHandlerMethod(handlerMethod);
-					invocable.setArgumentResolvers(getArgumentResolvers());
-
-					return invocable.invoke(exchange, bindingContext)
-							.doOnNext(result -> result.setExceptionHandler(exceptionHandler))
-							.otherwise(exceptionHandler);
-				});
+				.initModel(handlerMethod, bindingContext, exchange)
+				.then(Mono.defer(() -> invocableMethod.invoke(exchange, bindingContext)))
+				.doOnNext(result -> result.setExceptionHandler(exceptionHandler))
+				.doOnNext(result -> bindingContext.saveModel())
+				.onErrorResume(exceptionHandler);
 	}
 
-	private List<SyncInvocableHandlerMethod> getInitBinderMethods(HandlerMethod handlerMethod) {
-		return this.controllerMethodResolver.resolveInitBinderMethods(handlerMethod);
-	}
+	private Mono<HandlerResult> handleException(Throwable exception, HandlerMethod handlerMethod,
+			BindingContext bindingContext, ServerWebExchange exchange) {
 
-	private List<InvocableHandlerMethod> getModelAttributeMethods(HandlerMethod handlerMethod) {
-		return this.controllerMethodResolver.resolveModelAttributeMethods(handlerMethod);
-	}
+		Assert.state(this.methodResolver != null, "Not initialized");
 
-	private Mono<HandlerResult> handleException(ServerWebExchange exchange, HandlerMethod handlerMethod,
-			BindingContext bindingContext, Throwable ex) {
+		// Success and error responses may use different content types
+		exchange.getAttributes().remove(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
+		exchange.getResponse().getHeaders().clearContentHeaders();
 
-		InvocableHandlerMethod invocable =
-				this.controllerMethodResolver.resolveExceptionHandlerMethod(ex, handlerMethod);
-
+		InvocableHandlerMethod invocable = this.methodResolver.getExceptionHandlerMethod(exception, handlerMethod);
 		if (invocable != null) {
 			try {
 				if (logger.isDebugEnabled()) {
-					logger.debug("Invoking @ExceptionHandler method: " + invocable.getMethod());
+					logger.debug(exchange.getLogPrefix() + "Using @ExceptionHandler " + invocable);
 				}
 				bindingContext.getModel().asMap().clear();
-				Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-				return invocable.invoke(exchange, bindingContext, cause, handlerMethod);
+				Throwable cause = exception.getCause();
+				if (cause != null) {
+					return invocable.invoke(exchange, bindingContext, exception, cause, handlerMethod);
+				}
+				else {
+					return invocable.invoke(exchange, bindingContext, exception, handlerMethod);
+				}
 			}
 			catch (Throwable invocationEx) {
 				if (logger.isWarnEnabled()) {
-					logger.warn("Failed to invoke: " + invocable.getMethod(), invocationEx);
+					logger.warn(exchange.getLogPrefix() + "Failure in @ExceptionHandler " + invocable, invocationEx);
 				}
 			}
 		}
-		return Mono.error(ex);
+		return Mono.error(exception);
 	}
 
 }

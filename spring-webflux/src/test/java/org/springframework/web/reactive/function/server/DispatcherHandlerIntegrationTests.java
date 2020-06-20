@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,17 +17,11 @@
 package org.springframework.web.reactive.function.server;
 
 import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
+import java.util.Map;
 
-import org.junit.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,32 +29,31 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.codec.HttpMessageReader;
-import org.springframework.http.codec.HttpMessageWriter;
-import org.springframework.http.server.reactive.AbstractHttpHandlerIntegrationTests;
 import org.springframework.http.server.reactive.HttpHandler;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.DispatcherHandler;
-import org.springframework.web.reactive.HandlerAdapter;
 import org.springframework.web.reactive.HandlerMapping;
-import org.springframework.web.reactive.config.WebFluxConfigurationSupport;
-import org.springframework.web.reactive.function.server.support.HandlerFunctionAdapter;
-import org.springframework.web.reactive.function.server.support.ServerResponseResultHandler;
-import org.springframework.web.reactive.result.view.ViewResolver;
+import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
+import org.springframework.web.testfixture.http.server.reactive.bootstrap.AbstractHttpHandlerIntegrationTests;
+import org.springframework.web.testfixture.http.server.reactive.bootstrap.HttpServer;
+import org.springframework.web.util.pattern.PathPattern;
 
-import static org.junit.Assert.assertEquals;
-import static org.springframework.web.reactive.function.BodyInserters.fromObject;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.web.reactive.function.BodyInserters.fromPublisher;
+import static org.springframework.web.reactive.function.server.RouterFunctions.nest;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 /**
  * Tests the use of {@link HandlerFunction} and {@link RouterFunction} in a
- * {@link DispatcherHandler}.
+ * {@link DispatcherHandler}, combined with {@link Controller}s.
  *
  * @author Arjen Poutsma
  */
-public class DispatcherHandlerIntegrationTests extends AbstractHttpHandlerIntegrationTests {
+class DispatcherHandlerIntegrationTests extends AbstractHttpHandlerIntegrationTests {
 
 	private final RestTemplate restTemplate = new RestTemplate();
 
@@ -80,32 +73,59 @@ public class DispatcherHandlerIntegrationTests extends AbstractHttpHandlerIntegr
 	}
 
 
-	@Test
-	public void mono() throws Exception {
+	@ParameterizedHttpServerTest
+	void mono(HttpServer httpServer) throws Exception {
+		startServer(httpServer);
+
 		ResponseEntity<Person> result =
 				this.restTemplate.getForEntity("http://localhost:" + this.port + "/mono", Person.class);
 
-		assertEquals(HttpStatus.OK, result.getStatusCode());
-		assertEquals("John", result.getBody().getName());
+		assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(result.getBody().getName()).isEqualTo("John");
 	}
 
-	@Test
-	public void flux() throws Exception {
+	@ParameterizedHttpServerTest
+	void flux(HttpServer httpServer) throws Exception {
+		startServer(httpServer);
+
 		ParameterizedTypeReference<List<Person>> reference = new ParameterizedTypeReference<List<Person>>() {};
 		ResponseEntity<List<Person>> result =
 				this.restTemplate
 						.exchange("http://localhost:" + this.port + "/flux", HttpMethod.GET, null, reference);
 
-		assertEquals(HttpStatus.OK, result.getStatusCode());
+		assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
 		List<Person> body = result.getBody();
-		assertEquals(2, body.size());
-		assertEquals("John", body.get(0).getName());
-		assertEquals("Jane", body.get(1).getName());
+		assertThat(body.size()).isEqualTo(2);
+		assertThat(body.get(0).getName()).isEqualTo("John");
+		assertThat(body.get(1).getName()).isEqualTo("Jane");
+	}
+
+	@ParameterizedHttpServerTest
+	void controller(HttpServer httpServer) throws Exception {
+		startServer(httpServer);
+
+		ResponseEntity<Person> result =
+				this.restTemplate.getForEntity("http://localhost:" + this.port + "/controller", Person.class);
+
+		assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(result.getBody().getName()).isEqualTo("John");
+	}
+
+	@ParameterizedHttpServerTest
+	void attributes(HttpServer httpServer) throws Exception {
+		startServer(httpServer);
+
+		ResponseEntity<String> result =
+				this.restTemplate
+						.getForEntity("http://localhost:" + this.port + "/attributes/bar", String.class);
+
+		assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
 	}
 
 
+	@EnableWebFlux
 	@Configuration
-	static class TestConfiguration extends WebFluxConfigurationSupport {
+	static class TestConfiguration {
 
 		@Bean
 		public PersonHandler personHandler() {
@@ -113,59 +133,38 @@ public class DispatcherHandlerIntegrationTests extends AbstractHttpHandlerIntegr
 		}
 
 		@Bean
-		public HandlerAdapter handlerAdapter() {
-			return new HandlerFunctionAdapter();
+		public PersonController personController() {
+			return new PersonController();
 		}
 
 		@Bean
-		public HandlerMapping handlerMapping(RouterFunction<?> routerFunction,
-				ApplicationContext applicationContext) {
-
-			return RouterFunctions.toHandlerMapping(routerFunction,
-					new HandlerStrategies() {
-						@Override
-						public Supplier<Stream<HttpMessageReader<?>>> messageReaders() {
-							return () -> getMessageCodecsConfigurer().getReaders().stream()
-									.map(reader -> (HttpMessageReader<?>) reader);
-						}
-
-						@Override
-						public Supplier<Stream<HttpMessageWriter<?>>> messageWriters() {
-							return () -> getMessageCodecsConfigurer().getWriters().stream()
-									.map(writer -> (HttpMessageWriter<?>) writer);
-						}
-
-						@Override
-						public Supplier<Stream<ViewResolver>> viewResolvers() {
-							return Stream::empty;
-						}
-
-						@Override
-						public Function<ServerRequest, Optional<Locale>> localeResolver() {
-							return DefaultHandlerStrategiesBuilder.DEFAULT_LOCALE_RESOLVER;
-						}
-					});
+		public AttributesHandler attributesHandler() {
+			return new AttributesHandler();
 		}
 
 		@Bean
-		public RouterFunction<?> routerFunction() {
-			PersonHandler personHandler = personHandler();
-			return route(RequestPredicates.GET("/mono"), personHandler::mono)
-					.and(route(RequestPredicates.GET("/flux"), personHandler::flux));
+		public RouterFunction<EntityResponse<Person>> monoRouterFunction(PersonHandler personHandler) {
+			return route(RequestPredicates.GET("/mono"), personHandler::mono);
 		}
 
 		@Bean
-		public ServerResponseResultHandler responseResultHandler() {
-			return new ServerResponseResultHandler();
+		public RouterFunction<ServerResponse> fluxRouterFunction(PersonHandler personHandler) {
+			return route(RequestPredicates.GET("/flux"), personHandler::flux);
+		}
+
+		@Bean
+		public RouterFunction<ServerResponse> attributesRouterFunction(AttributesHandler attributesHandler) {
+			return nest(RequestPredicates.GET("/attributes"),
+					route(RequestPredicates.GET("/{foo}"), attributesHandler::attributes));
 		}
 	}
 
 
 	private static class PersonHandler {
 
-		public Mono<ServerResponse> mono(ServerRequest request) {
+		public Mono<EntityResponse<Person>> mono(ServerRequest request) {
 			Person person = new Person("John");
-			return ServerResponse.ok().body(fromObject(person));
+			return EntityResponse.fromObject(person).build();
 		}
 
 		public Mono<ServerResponse> flux(ServerRequest request) {
@@ -174,8 +173,54 @@ public class DispatcherHandlerIntegrationTests extends AbstractHttpHandlerIntegr
 			return ServerResponse.ok().body(
 					fromPublisher(Flux.just(person1, person2), Person.class));
 		}
-
 	}
+
+
+	private static class AttributesHandler {
+
+		@SuppressWarnings("unchecked")
+		public Mono<ServerResponse> attributes(ServerRequest request) {
+			assertThat(request.attributes().containsKey(RouterFunctions.REQUEST_ATTRIBUTE)).isTrue();
+			assertThat(request.attributes().containsKey(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE)).isTrue();
+
+			Map<String, String> pathVariables =
+					(Map<String, String>) request.attributes().get(RouterFunctions.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
+			assertThat(pathVariables).isNotNull();
+			assertThat(pathVariables.size()).isEqualTo(1);
+			assertThat(pathVariables.get("foo")).isEqualTo("bar");
+
+			pathVariables =
+					(Map<String, String>) request.attributes().get(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
+			assertThat(pathVariables).isNotNull();
+			assertThat(pathVariables.size()).isEqualTo(1);
+			assertThat(pathVariables.get("foo")).isEqualTo("bar");
+
+
+			PathPattern pattern =
+					(PathPattern) request.attributes().get(RouterFunctions.MATCHING_PATTERN_ATTRIBUTE);
+			assertThat(pattern).isNotNull();
+			assertThat(pattern.getPatternString()).isEqualTo("/attributes/{foo}");
+
+			pattern = (PathPattern) request.attributes()
+					.get(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+			assertThat(pattern).isNotNull();
+			assertThat(pattern.getPatternString()).isEqualTo("/attributes/{foo}");
+
+			return ServerResponse.ok().build();
+		}
+	}
+
+
+	@Controller
+	public static class PersonController {
+
+		@RequestMapping("/controller")
+		@ResponseBody
+		public Mono<Person> controller() {
+			return Mono.just(new Person("John"));
+		}
+	}
+
 
 	private static class Person {
 

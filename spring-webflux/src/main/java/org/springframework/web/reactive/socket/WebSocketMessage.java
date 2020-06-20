@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,18 +15,20 @@
  */
 package org.springframework.web.reactive.socket;
 
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 
 /**
  * Representation of a WebSocket message.
- * <p>See static factory methods in {@link WebSocketSession} for creating messages
- * with the {@link org.springframework.core.io.buffer.DataBufferFactory
- * DataBufferFactory} for the session.
+ *
+ * <p>See static factory methods in {@link WebSocketSession} for creating messages with
+ * the {@link org.springframework.core.io.buffer.DataBufferFactory} for the session.
  *
  * @author Rossen Stoyanchev
  * @since 5.0
@@ -67,13 +69,22 @@ public class WebSocketMessage {
 	}
 
 	/**
-	 * Return the message payload as UTF-8 text. This is a useful for text
-	 * WebSocket messages.
+	 * A variant of {@link #getPayloadAsText(Charset)} that uses {@code UTF-8}
+	 * for decoding the raw content to text.
 	 */
 	public String getPayloadAsText() {
-		byte[] bytes = new byte[this.payload.readableByteCount()];
-		this.payload.read(bytes);
-		return new String(bytes, StandardCharsets.UTF_8);
+		return getPayloadAsText(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * A shortcut for decoding the raw content of the message to text with the
+	 * given character encoding. This is useful for text WebSocket messages, or
+	 * otherwise when the payload is expected to contain text.
+	 * @param charset the character encoding
+	 * @since 5.0.5
+	 */
+	public String getPayloadAsText(Charset charset) {
+		return this.payload.toString(charset);
 	}
 
 	/**
@@ -105,7 +116,7 @@ public class WebSocketMessage {
 
 
 	@Override
-	public boolean equals(Object other) {
+	public boolean equals(@Nullable Object other) {
 		if (this == other) {
 			return true;
 		}
@@ -122,10 +133,32 @@ public class WebSocketMessage {
 		return this.type.hashCode() * 29 + this.payload.hashCode();
 	}
 
+	@Override
+	public String toString() {
+		return "WebSocket " + this.type.name() + " message (" + this.payload.readableByteCount() + " bytes)";
+	}
+
 
 	/**
 	 * WebSocket message types.
 	 */
-	public enum Type { TEXT, BINARY, PING, PONG }
+	public enum Type {
+		/**
+		 * Text WebSocket message.
+		 */
+		TEXT,
+		/**
+		 * Binary WebSocket message.
+		 */
+		BINARY,
+		/**
+		 * WebSocket ping.
+		 */
+		PING,
+		/**
+		 * WebSocket pong.
+		 */
+		PONG
+	}
 
 }
